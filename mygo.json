@@ -1,7 +1,7 @@
 {
   "name": "Quosparr",
   "identifier": "com.quosparr.app",
-  "version": "1.7.3",
+  "version": "1.7.3-cursor.1",
   "copyright": "Copyright (c) 2026 Licoy",
   "icon": "Resources/AppIcon.png",
   "out": "build",
@@ -9,8 +9,8 @@
     "quosparr"
   ],
   "updates": {
-    "publicKey": "507E2p3cAfmlHfGioxEXEZB9KmO88l1wEYepnxwvy0M=",
-    "github": "Licoy/Quosparr",
+    "publicKey": "nSi0GCuNR2zl0Bp1GJoRpLd2mcWfl4YGOy0QR/0lcjs=",
+    "github": "fan776783/Quosparr",
     "deltas": 0
   },
   "macos": {

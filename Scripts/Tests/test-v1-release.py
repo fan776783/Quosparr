@@ -30,7 +30,7 @@ class StageConfigTests(unittest.TestCase):
    env.update(V1_CONFIG_PATH=str(root/"mygo.json"),V1_UPDATE_CHANNEL="stable",V1_DEVELOPMENT_PACKAGE="0")
    subprocess.run(["python3",str(root/"Scripts/stage-v1-config.py"),str(root),temporary],env=env,check=True)
    staged=json.loads((pathlib.Path(temporary)/"mygo.json").read_text())
-   self.assertEqual(staged["updates"]["github"],"Licoy/Quosparr")
+   self.assertEqual(staged["updates"]["github"],"fan776783/Quosparr")
    self.assertEqual(staged["updates"]["tagPrefix"],"v")
    self.assertNotIn("url",staged["updates"])
 
