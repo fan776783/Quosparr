@@ -32,7 +32,7 @@ MYGO_UPDATE_PRIVATE_KEY="$(cat "$KEY")" V1_DEVELOPMENT_PACKAGE=0 V1_BUILD_DIR="$
 go run ./Scripts/release-assets verify -config "$WORK/config/mygo.json" -dir "$WORK" -targets "darwin-$GOARCH"
 
 gh release create "$TAG" -R "$REPO" --target "$HEAD" --latest --title "Quosparr $VERSION" \
-  --notes "Fork build of upstream $(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]' 2>/dev/null || echo main) with Cursor quota monitoring." \
+  --notes "Fork build of upstream v${VERSION%%-cursor.*} with Cursor quota monitoring." \
   "$WORK/Quosparr-macos-$ARCH.zip" "$WORK/Quosparr-macos-$ARCH.dmg" \
   "$WORK/quosparr-$VERSION-darwin-$GOARCH.tar.gz" "$WORK/update-darwin-$GOARCH.json"
 printf 'Published %s: https://github.com/%s/releases/tag/%s\n' "$TAG" "$REPO" "$TAG"

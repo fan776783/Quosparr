@@ -1,0 +1,107 @@
+name: Fork Sync
+
+# Merges upstream Licoy/Quosparr into this fork's main, tests and pushes it,
+# then publishes a signed macOS release when mygo.json has a version without
+# a release yet (docs/fork.md). Pushes use GITHUB_TOKEN, which cannot change
+# workflow files: an upstream change under .github/workflows fails the push
+# and needs a manual sync.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'fan776783/Quosparr'
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Merge upstream
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Licoy/Quosparr.git
+          git fetch --no-tags upstream main
+          version="$(python3 -c 'import json; print(json.load(open("mygo.json"))["version"])')"
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Already up to date with upstream"
+          else
+            git show HEAD:mygo.json > "$RUNNER_TEMP/fork-mygo.json"
+            git show upstream/main:mygo.json > "$RUNNER_TEMP/upstream-mygo.json"
+            if ! git merge --no-edit upstream/main; then
+              conflicts="$(git diff --name-only --diff-filter=U)"
+              if [[ "$conflicts" != mygo.json ]]; then
+                git merge --abort
+                {
+                  echo "### Upstream merge conflicts"
+                  echo
+                  printf -- '- `%s`\n' $conflicts
+                  echo
+                  echo "Merge upstream locally as described in docs/fork.md."
+                } >> "$GITHUB_STEP_SUMMARY"
+                echo "::error::Upstream merge conflicts: $(echo $conflicts)"
+                exit 1
+              fi
+              git checkout --theirs mygo.json
+            fi
+            version="$(python3 Scripts/fork-sync-config.py "$RUNNER_TEMP/fork-mygo.json" "$RUNNER_TEMP/upstream-mygo.json")"
+            git add mygo.json
+            if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+              git commit --no-edit
+            elif ! git diff --cached --quiet; then
+              git commit -m "chore(fork): 同步上游版本号为 $version"
+            fi
+          fi
+          changed=false
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || changed=true
+          release=true
+          ! gh release view "v$version" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || release=false
+          {
+            echo "version=$version"
+            echo "changed=$changed"
+            echo "release=$release"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version $version, merged: $changed, release needed: $release" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-go@v6
+        if: steps.merge.outputs.changed == 'true' || steps.merge.outputs.release == 'true'
+        with:
+          go-version-file: go.mod
+      - name: Test merged main
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          go vet ./...
+          go test -count=1 -timeout=10m ./...
+          python3 Scripts/Tests/test-v1-release.py
+      - name: Push merged main
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          if ! git push origin HEAD:main; then
+            echo "Push failed. If upstream changed .github/workflows, GITHUB_TOKEN cannot push it: merge upstream locally (docs/fork.md)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Publish signed release
+        if: steps.merge.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORK_UPDATE_PRIVATE_KEY: ${{ secrets.FORK_UPDATE_PRIVATE_KEY }}
+        run: |
+          [[ -n "$FORK_UPDATE_PRIVATE_KEY" ]] || { echo "::error::Missing FORK_UPDATE_PRIVATE_KEY secret"; exit 1; }
+          key="$RUNNER_TEMP/mygo-update.key"
+          (umask 077; printf '%s\n' "$FORK_UPDATE_PRIVATE_KEY" > "$key")
+          FORK_REMOTE=origin FORK_REPO="$GITHUB_REPOSITORY" FORK_UPDATE_KEY="$key" ARCH=arm64 \
+            bash Scripts/fork-release.sh
+          rm -f "$key"

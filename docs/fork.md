@@ -9,7 +9,16 @@
 - 版本号：`<上游版本>-cursor.<序号>`，如上游 `1.7.3` 对应 `1.7.3-cursor.1`，同一上游版本上的后续发布递增序号
 - 发布：`Scripts/fork-release.sh` 在本机打包 macOS 版本、签名更新清单并发布到 fork Releases（设为 latest）；fork 仓库停用了 `Release Draft` 与 `Website` workflow，CI 保留
 
-## 同步上游
+## 自动同步
+
+`.github/workflows/fork-sync.yml` 每 6 小时（也可在 Actions 页手动运行）合并上游 `Licoy/Quosparr` 的 main：
+
+- 只有 `mygo.json` 冲突时自动解决：保留上游其他字段，写回 fork 的公钥与仓库；上游升版时版本号改为 `<上游版本>-cursor.1`，上游预发布版本不自动同步
+- 其他冲突、测试失败，或上游改动了 `.github/workflows`（`GITHUB_TOKEN` 无权推送 workflow 文件）时不推送，运行失败并在摘要中列出原因，需按下方步骤手动同步
+- `go vet` / `go test` 通过后推送到 fork main；`mygo.json` 的版本尚无对应 Release 时，在 macOS runner 上用 `FORK_UPDATE_PRIVATE_KEY` Secret 打包签名并发布 arm64 版本，已安装的 fork 版本随后经应用内更新升级
+- 运行失败由 GitHub 的定时 workflow 通知邮件提醒（fork 未开启 issues）
+
+## 手动同步上游
 
 ```bash
 git fetch origin
