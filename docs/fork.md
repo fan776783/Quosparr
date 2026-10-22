@@ -7,7 +7,7 @@
 - Cursor 额度监控：`internal/cursor`、相关 UI / 偏好 / 文案与 `docs/cursor-monitoring.md`
 - 更新源：`mygo.json` 的 `updates.github` 为 `fan776783/Quosparr`，`updates.publicKey` 为 fork 自有公钥；`internal/app/update.go` 的 Releases 链接同步指向 fork
 - 版本号：`<上游版本>-cursor.<序号>`，如上游 `1.7.3` 对应 `1.7.3-cursor.1`，同一上游版本上的后续发布递增序号
-- 发布：`Scripts/fork-release.sh` 在本机打包 macOS 版本、签名更新清单并发布到 fork Releases（设为 latest）；fork 仓库停用了 `Release Draft` 与 `Website` workflow，CI 保留
+- 发布：Fork Sync 发布 macOS arm64 与 Windows x64 正式包到同一个 fork Release；`Scripts/fork-release.sh` 保留本机 macOS 发布入口（设为 latest）；fork 仓库停用了 `Release Draft` 与 `Website` workflow，CI 保留
 
 ## 自动同步
 
@@ -17,6 +17,9 @@
 - 其他冲突、测试失败，或上游改动了 `.github/workflows`（`GITHUB_TOKEN` 无权推送 workflow 文件）时不推送，运行失败并在摘要中列出原因，需按下方步骤手动同步
 - 有新合并或待发布版本时，必须运行与 CI 共用的 `Scripts/check-go-release.sh`：`go vet`、race 测试、开发包测试、六平台交叉编译及全部发布辅助检查；检查通过后才推送和发布。没有新合并也不能跳过待发布版本的检查，检查失败不发布
 - `mygo.json` 的版本尚无对应 Release 时，在 macOS runner 上用 `FORK_UPDATE_PRIVATE_KEY` Secret 打包签名并发布 arm64 版本，已安装的 fork 版本随后经应用内更新升级；写权限仅授予限定本 fork 的同步 job，签名私钥临时文件在退出时清理
+- 同步成功后，独立 Windows x64 job 检查同版本 Release：缺少全部 Windows 附件时，从该 Release 的标签检出源码，以同一 `FORK_UPDATE_PRIVATE_KEY` 构建正式包（更新器开启），通过归档验签及 Windows 原生安装、卸载、SQLite 检查后，追加 `Quosparr.Setup.<version>.amd64.exe`、`quosparr-<version>-windows-amd64.tar.gz` 和 `update-windows-amd64.json`；更新清单最后上传。macOS 发布后、Windows job 完成前，Release 暂时只有 macOS 包
+- Windows 三个附件已完整存在时跳过；因此重跑 Fork Sync 也能给已有版本补包。部分附件存在、附件为空或网络查询失败时停止，不覆盖已有文件、不移动标签；需核对上次上传后再处理。Windows 写权限同样只授予限定本 fork 的发布 job
+- 手动运行时可勾选 `windows_only`：仅为当前 `mygo.json` 版本的已有 Release 补 Windows 包，跳过上游合并与 macOS 发布；定时运行仍按正常同步流程执行
 - 普通 CI 还会执行 Windows / Linux 原生测试、安装器验证与 macOS 双架构开发包检查；Fork Sync 的共用检查不替代这些平台验收。GitHub macOS ARM runner 容量不足时任务可能未启动，恢复容量后可重跑；代码冲突必须先手动解决
 - 运行失败由 GitHub 的定时 workflow 通知邮件提醒（fork 未开启 issues）
 
