@@ -42,6 +42,23 @@ func TestStatusBarTabShowsEveryStyleAndItsOptions(t *testing.T) {
 	if got := u.s.Prefs().StatusBar.Battery; got != store.BatteryVertical {
 		t.Fatalf("battery = %q", got)
 	}
+	if tt.HasText(tx(l, xRingValues)) {
+		t.Fatal("ring options shown for another style")
+	}
+	if err := tt.Click(statusBarStyleName(l, store.StatusBarStyleRings)); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	// The switch sits at the end of its row, beside the title and the hint.
+	title, ok := tt.Find(tx(l, xRingValues))
+	hint, hintOK := tt.Find(tx(l, xRingValuesHint))
+	if !ok || !hintOK {
+		t.Fatal("ring options missing")
+	}
+	tt.ClickAt(float32(tt.Image().Bounds().Dx()-48), (title.Y+hint.Y+hint.H)/2)
+	if !u.s.Prefs().StatusBar.RingValues {
+		t.Fatal("values inside rings not saved")
+	}
 	// The appearance page no longer carries the status item.
 	u.tab = tabDisplay
 	tt.Frame()
@@ -55,6 +72,7 @@ func TestCursorStatusBarPreviewHasPoolsAndIcon(t *testing.T) {
 	p := store.DefaultPreferences()
 	p.SetStatusBarQuotaWindow(store.StatusBarWindowAuto)
 	p.SelectedProvider = store.ProviderCursor
+	p.StatusBar.RingValues = true
 	if trayProviderIcon(store.ProviderCursor) == nil {
 		t.Fatal("Cursor tray icon missing")
 	}
@@ -67,6 +85,9 @@ func TestCursorStatusBarPreviewHasPoolsAndIcon(t *testing.T) {
 		cells := r.Components[0].Cells
 		if cells[0].Empty || cells[0].Label != l.Text(l10n.KeyCursorAuto) || cells[1].Label != l.Text(l10n.KeyCursorAPI) {
 			t.Fatalf("%s preview pools = %+v", style, cells)
+		}
+		if style == store.StatusBarStyleRings && (!r.RingValues || cells[0].RingText != "73" || cells[1].RingText != "41" || !ringValuesFit(cells)) {
+			t.Fatalf("Cursor ring values missing: %+v", r)
 		}
 	}
 }
