@@ -15,7 +15,9 @@
 
 - 只有 `mygo.json` 冲突时自动解决：保留上游其他字段，写回 fork 的公钥与仓库；上游升版时版本号改为 `<上游版本>-cursor.1`，上游预发布版本不自动同步
 - 其他冲突、测试失败，或上游改动了 `.github/workflows`（`GITHUB_TOKEN` 无权推送 workflow 文件）时不推送，运行失败并在摘要中列出原因，需按下方步骤手动同步
-- `go vet` / `go test` 通过后推送到 fork main；`mygo.json` 的版本尚无对应 Release 时，在 macOS runner 上用 `FORK_UPDATE_PRIVATE_KEY` Secret 打包签名并发布 arm64 版本，已安装的 fork 版本随后经应用内更新升级
+- 有新合并或待发布版本时，必须运行与 CI 共用的 `Scripts/check-go-release.sh`：`go vet`、race 测试、开发包测试、六平台交叉编译及全部发布辅助检查；检查通过后才推送和发布。没有新合并也不能跳过待发布版本的检查，检查失败不发布
+- `mygo.json` 的版本尚无对应 Release 时，在 macOS runner 上用 `FORK_UPDATE_PRIVATE_KEY` Secret 打包签名并发布 arm64 版本，已安装的 fork 版本随后经应用内更新升级；写权限仅授予限定本 fork 的同步 job，签名私钥临时文件在退出时清理
+- 普通 CI 还会执行 Windows / Linux 原生测试、安装器验证与 macOS 双架构开发包检查；Fork Sync 的共用检查不替代这些平台验收。GitHub macOS ARM runner 容量不足时任务可能未启动，恢复容量后可重跑；代码冲突必须先手动解决
 - 运行失败由 GitHub 的定时 workflow 通知邮件提醒（fork 未开启 issues）
 
 ## 手动同步上游
@@ -25,7 +27,7 @@ git fetch origin
 git switch main
 git merge origin/main
 # mygo.json 的 version 冲突时取上游版本加 -cursor.1；publicKey / github 保留 fork 值
-go test ./... && go vet ./...
+bash Scripts/check-go-release.sh
 git push fork main
 ```
 

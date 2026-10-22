@@ -1,7 +1,7 @@
 {
   "name": "Quosparr",
   "identifier": "com.quosparr.app",
-  "version": "1.7.3-cursor.2",
+  "version": "1.8.0-cursor.1",
   "copyright": "Copyright (c) 2026 Licoy",
   "icon": "Resources/AppIcon.png",
   "out": "build",
@@ -18,7 +18,7 @@
     "infoPlist": {
       "LSUIElement": true,
       "SUPublicEDKey": "6Mmv1BwimF7c+lSHsaV/rDGH1oFNzYMjXYfWHMdARTk=",
-      "CFBundleVersion": "127",
+      "CFBundleVersion": "130",
       "CFBundleURLTypes": [
         {
           "CFBundleURLName": "Quosparr Widget",
@@ -38,6 +38,7 @@
     "depends": [
       "libayatana-appindicator3-1",
       "gnome-keyring | kwalletmanager"
-    ]
+    ],
+    "webview": false
   }
 }

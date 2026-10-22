@@ -98,12 +98,27 @@ class DraftWorkflowTests(unittest.TestCase):
                     for command in forbidden:
                         self.assertNotIn(command, step.get("run", ""))
 
-    def test_only_draft_jobs_have_repository_write_permission(self):
+    def test_only_publishing_jobs_have_repository_write_permission(self):
+        allowed = {("release.yml", "v1-release"), ("fork-sync.yml", "sync")}
         for name, workflow in self.workflows.items():
             self.assertEqual(workflow["permissions"], {"contents": "read"})
             for job_id, job in workflow["jobs"].items():
                 write = job.get("permissions", {}).get("contents") == "write"
-                self.assertEqual(write, name == "release.yml" and job_id == "v1-release")
+                self.assertEqual(write, (name, job_id) in allowed, (name, job_id))
+        self.assertEqual(self.workflows["fork-sync.yml"]["jobs"]["sync"]["if"],
+                         "github.repository == 'fan776783/Quosparr'")
+
+    def test_fork_release_runs_ci_checks_even_without_a_merge(self):
+        ci = self.workflows["ci.yml"]["jobs"]["go-checks"]["steps"]
+        steps = self.workflows["fork-sync.yml"]["jobs"]["sync"]["steps"]
+        checks = next(s for s in steps if s.get("run") == "bash Scripts/check-go-release.sh")
+        self.assertTrue(any(s.get("run") == checks["run"] for s in ci))
+        self.assertEqual(checks["if"],
+                         "steps.merge.outputs.changed == 'true' || steps.merge.outputs.release == 'true'")
+        publish = next(s for s in steps if s.get("name") == "Publish signed release")
+        self.assertLess(steps.index(checks), steps.index(publish))
+        self.assertNotIn("continue-on-error", checks)
+        self.assertEqual(publish["if"], "steps.merge.outputs.release == 'true'")
 
 
 if __name__ == "__main__":

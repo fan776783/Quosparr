@@ -200,10 +200,7 @@ func run(command app.Command) int {
 		log.Println("updater:", err)
 	}
 	if upd != nil && !dev {
-		// Each launch checks once (when checks are on), then hourly.
-		if err := app.ForgetLastUpdateCheck(mg); err != nil {
-			log.Println("updater state:", err)
-		}
+		// mygo checks soon after each launch (when checks are on), then hourly.
 		upd.Reapply(settings)
 	}
 	notifier := app.NewNotifier()
@@ -277,7 +274,7 @@ func run(command app.Command) int {
 // quits. Dev only (a scratch preferences domain is set).
 func devScreenshots(ui *app.App, base string) {
 	time.Sleep(1500 * time.Millisecond)
-	for tab := 0; tab < 11; tab++ {
+	for tab := 0; tab < app.SettingsTabCount(); tab++ {
 		mygo.RunOnMain(func() { ui.OpenSettingsTab(tab) })
 		time.Sleep(700 * time.Millisecond)
 		png, err := ui.CaptureSettings()

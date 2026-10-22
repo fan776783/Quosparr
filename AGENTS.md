@@ -12,7 +12,7 @@ v1 已正式发布（`v1.0.0`、`v1.0.1`）；macOS 仅保留 Swift WidgetKit �
 - 默认不引入第三方依赖；标准库和系统框架能解决的问题不要加包。
 - Widget 与桥接使用 Swift 6、WidgetKit、SwiftUI、Foundation；Widget 工程由 `WidgetExtension/project.yml` 经 xcodegen 生成，不另建 Xcode project，除非用户明确要求。
 - 状态栏应用必须保持 `LSUIElement=true`，不要显示 Dock 图标。
-- Go 版本和依赖版本以 `go.mod` 为准，当前固定 Go 1.27.1、mygo v0.5.5；不将框架升级与迁移改动混在一起
+- Go 版本和依赖版本以 `go.mod` 为准，当前固定 Go 1.27.1、mygo v0.6.2；不将框架升级与迁移改动混在一起
 - mygo/ui 只负责原生界面与框架服务，不引入 WebView 前端；业务核心不能依赖 UI
 - purego 仅用于必要的平台 API、SQLite 和 Swift 桥接边界，按平台拆分并检查 ABI、资源生命周期与错误传播；不用它增加业务抽象
 - macOS Go 主应用使用 mygo 更新器，不嵌入 Sparkle 运行库；保留 `SUPublicEDKey`，已安装的同身份 Quosparr Swift 版本通过 `quosparr-appcast-<arch>.xml` 升级到 Go 版本，该 appcast 由 `go run ./Scripts/release-assets sparkle-appcast` 直接生成并以 Ed25519 签名 ZIP，不依赖 Sparkle 工具或 Swift 构建；旧身份 appcast 仅提供手动下载链接，不做跨 bundle ID 自动安装
@@ -92,7 +92,7 @@ Quosparr v1 面向 macOS、Windows、Linux，主程序使用 Go + mygo/ui 原生
 - 首次无偏好配置的启动显示设置并保存默认偏好，已有配置或从旧版迁移的用户普通启动时仅驻留菜单栏；主动点击设置或显式传入 `--settings` 才再次打开设置，日常 Dev 重启不附加该参数
 - Codex 支持配额窗口、订阅到期、reset credits、周额度推算与历史对比，Grok 展示官方 CLI chat-proxy 额度及 Build / Imagine / Chat 拆分、周期、预付余额和按需使用情况，Claude 展示 Claude Code 订阅用量的 5 小时、7 天、按模型周额度和额外用量，以及与 Codex 共用展示的重置次数
 - Codex 与 Claude Code 另支持 API 账号（Base URL + API Key，可从站点获取模型列表；Claude 可分别映射 Opus / Sonnet / Haiku / Fable 模型），在多账号中添加、编辑与切换，并在账号列表、主面板、状态栏、悬浮窗与 Widget 显示中转站余额（new-api 类令牌额度或 OpenAI 兼容账单接口，站点不提供时明确说明，不估算）；Codex 无 Base URL 时为官方 OpenAI API Key
-- 三个供应商均保留账号管理、本地 Token 用量图表、API 等价成本与最近会话，图表支持热力图、折线图和柱状图；主面板的“缓存命中分析”默认开启，独立读取本机会话日志，按今日、当前周期、上个周期、本月或自定义日期展示整体、模型与会话的缓存输入命中率，缺失缓存字段的记录不进入分母并单独提示；超长或损坏的日志行按行首类型识别，确定不含用量的直接跳过，可能含用量的跳过并提示统计可能不完整（只计入范围开始后仍有修改的日志），不因单个文件让模块整体失败，无效 Token 计数仍报错；Codex 另有会话索引修复与公开重置动态。主面板另有“Skills”模块（偏好键 `showsSkills` 仅 Go 版写入，默认开启时省略），列出三家全局 skill 的来源、状态与共享情况，可搜索、查看 SKILL.md、打开目录、启停与移到回收站，并诊断失效链接、嵌套与重名等问题，可按问题一键修复或多选后批量删除、修复（均先说明风险再确认执行）；设置窗口在“通知提醒”之后单独一组提供“Skill 管理”，按 Codex / Claude / Grok 分页，可按状态、位置、共享 / 链接 / GitHub / 问题 / 可删除 / 可启停筛选与排序，详情页展示安装来源（skills CLI 锁文件、git、插件市场或 frontmatter）、仓库与主页链接、文件列表、frontmatter 与诊断，末页为可恢复的 Skill 回收站。状态栏和 Widget 最多同时显示两个供应商，旧值 `both` 仍是 Codex + Grok；三端另有可选的置顶桌面悬浮窗（偏好对象 `floatingWindow` 仅 Go 版写入，默认省略），样式独立于状态栏，提供胶囊、卡片、圆环、电池四种，最多显示三个供应商，可调不透明度、锁定位置与是否显示在全屏应用上方，并可按前台应用以白名单 / 黑名单显隐（桌面在前台时始终显示，名单来自系统已安装应用或手动选择的文件，前台检测为 250ms 轮询，macOS 用 NSWorkspace、Windows 用前台窗口进程与 AUMID、Linux 仅 X11，Wayland 下不可用）；Windows 后端不支持透明内容，卡片铺满窗口并由 DWM 圆角，全屏检测为 2 秒轮询，Linux Wayland 下置顶与定位由合成器决定，三端真机交互仍待验收
+- 三个供应商均保留账号管理、本地 Token 用量图表、API 等价成本与最近会话，图表支持热力图、折线图和柱状图；主面板的“缓存命中分析”默认开启，独立读取本机会话日志，按今日、当前周期、上个周期、本月或自定义日期展示整体、模型与会话的缓存输入命中率，缺失缓存字段的记录不进入分母并单独提示；超长或损坏的日志行按行首类型识别，确定不含用量的直接跳过，可能含用量的跳过并提示统计可能不完整（只计入范围开始后仍有修改的日志），不因单个文件让模块整体失败，无效 Token 计数仍报错；Codex 另有会话索引修复与公开重置动态。主面板另有“Skills”模块（偏好键 `showsSkills` 仅 Go 版写入，默认开启时省略），列出三家全局 skill 的来源、状态与共享情况，可搜索、查看 SKILL.md、打开目录、启停与移到回收站，并诊断失效链接、嵌套与重名等问题，可按问题一键修复或多选后批量删除、修复（均先说明风险再确认执行）；设置窗口在“通知提醒”之后单独一组提供“Skill 管理”，按 Codex / Claude / Grok 分页，可按状态、位置、共享 / 链接 / GitHub / 问题 / 可删除 / 可启停筛选与排序，详情页展示安装来源（skills CLI 锁文件、git、插件市场或 frontmatter）、仓库与主页链接、文件列表、frontmatter 与诊断，末页为可恢复的 Skill 回收站。macOS 状态栏在设置“外观与菜单”之后单独一页“状态栏组件”，含预览、额度条 / 倒计时 / 电池 / 圆环 / 进度文本五种样式、服务商排列与显示选项：四个供应商（含 Cursor）可分别显示为独立组件，额度条、倒计时与电池可将两个供应商上下叠放在同一组件，圆环与进度文本始终逐个显示，电池分横向 / 竖向两种绘制；偏好对象 `statusBarLayout` 仅 Go 版写入、默认省略，`statusBarProviders` 同步保存前两个供应商供旧版读取，额度周期未选择时电池沿用旧 `statusBarBatteryScope`，选择后回写该键；Windows / Linux 托盘仍只显示应用图标；Widget 最多同时显示两个供应商，旧值 `both` 仍是 Codex + Grok；三端另有可选的置顶桌面悬浮窗（偏好对象 `floatingWindow` 仅 Go 版写入，默认省略），样式独立于状态栏，提供胶囊、卡片、圆环、电池四种，最多显示三个供应商，可调不透明度、锁定位置与是否显示在全屏应用上方，并可按前台应用以白名单 / 黑名单显隐（桌面在前台时始终显示，名单来自系统已安装应用或手动选择的文件，前台检测为 250ms 轮询，macOS 用 NSWorkspace、Windows 用前台窗口进程与 AUMID、Linux 仅 X11，Wayland 下不可用）；Windows 后端不支持透明内容，卡片铺满窗口并由 DWM 圆角，全屏检测为 2 秒轮询，Linux Wayland 下置顶与定位由合成器决定，三端真机交互仍待验收
 - 主应用支持浅色、深色、跟随系统，以及英文、简体中文、繁体中文、韩文、日文、俄文、法文；显示字体可选“默认”（系统字体）或本机已安装字体族，作用于主面板与设置窗口，偏好键 `fontFamily` 仅 Go 版写入，菜单栏图标保持系统字体
 - 自动测试和交叉编译不能替代三端安装、桌面与迁移验收，待验收项见 [验收清单](docs/v1-acceptance-checklist.md) 与 [发布说明](docs/v1-release.md)
 
@@ -106,7 +106,7 @@ Quosparr v1 面向 macOS、Windows、Linux，主程序使用 Go + mygo/ui 原生
 | Windows 10 / 11 amd64 / arm64 | `Quosparr Setup <version> <arch>.exe` | 用户级安装到 `%LOCALAPPDATA%\Programs\Quosparr`，不要求管理员身份 |
 | Linux amd64 / arm64 | `quosparr-<version>-linux-<arch>.tar.gz` 与 `install.sh`，或 `quosparr_<Debian-version>_<arch>.deb` | tar.gz 使用可写用户目录，deb 通过包管理器安装到 `/opt/quosparr` |
 
-- Linux 需要 GTK3、AppIndicator、支持托盘的桌面，以及用于代理凭据的可用 Secret Service 会话；缺少桌面库时应明确提示，deb 通过包管理器更新，只读或受限目录需要在可写位置手动安装
+- Linux 需要 GTK3、AppIndicator、支持托盘的桌面，以及用于代理凭据的可用 Secret Service 会话；纯原生界面不加载 WebKitGTK，`mygo.json` 的 `linux.webview` 为 `false`，deb 与 install.sh 不依赖也不检查它，引入网页视图前须先改回；缺少桌面库时应明确提示，deb 通过包管理器更新，只读或受限目录需要在可写位置手动安装
 - macOS 包目前为 ad-hoc signed，未公证，首次打开可能需要在系统“隐私与安全性”中授权；Developer ID 签名与公证单独推进
 - Homebrew cask 生成器已准备，外部 `Licoy/homebrew-tap` 尚未同步新名称，当前工作流也暂停了 cask 准备与分发；恢复并发布后才使用 `brew install --cask licoy/tap/quosparr`，此前使用 DMG，详见 [Homebrew 同步说明](docs/v1-homebrew.md)
 - 普通卸载保留本地数据，显式 `--zap` 只清理 Quosparr 数据，不清理保留的旧应用目录或官方 Codex / Grok 文件
@@ -136,7 +136,7 @@ Quosparr v1 面向 macOS、Windows、Linux，主程序使用 Go + mygo/ui 原生
 
 ### 开发运行与 Widget
 
-使用 `go.mod` 固定的 Go 1.27.1 和 mygo v0.5.5，默认隔离运行示例：
+使用 `go.mod` 固定的 Go 1.27.1 和 mygo v0.6.2，默认隔离运行示例：
 
 ```bash
 QUOSPARR_TEST_HOME="$(mktemp -d)"

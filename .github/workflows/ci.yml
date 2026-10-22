@@ -30,22 +30,8 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Vet and race tests without desktop interaction
-        run: |
-          go vet ./...
-          go test -race -count=1 ./...
-          go test -tags=quosparr_dev_package -count=1 ./internal/app -run '^TestPackagedDevelopmentUpdate'
-      - name: Compile all six targets
-        run: |
-          for target in darwin/arm64 darwin/amd64 windows/amd64 windows/arm64 linux/amd64 linux/arm64; do
-            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build ./...
-          done
-      - name: Check release helpers
-        run: |
-          python3 Scripts/Tests/test-v1-release.py
-          python3 Scripts/Tests/test-v1-homebrew.py
-          python3 Scripts/Tests/test-v1-platform.py
-          python3 Scripts/Tests/test-workflow-drafts.py
+      - name: Verify Go and release helpers
+        run: bash Scripts/check-go-release.sh
 
   go-native-tests:
     needs: go-checks
