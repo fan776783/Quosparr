@@ -130,6 +130,8 @@ jobs:
         shell: bash
     env:
       FORK_VERSION: ${{ needs.sync.outputs.version }}
+      # Git Bash must not reinterpret base64 signing keys as filesystem paths.
+      MSYS2_ENV_CONV_EXCL: MYGO_UPDATE_PRIVATE_KEY;MYGO_UPDATER_PRIVATE_KEY
     steps:
       - name: Check Windows release assets
         id: assets
@@ -168,6 +170,15 @@ jobs:
         if: steps.assets.outputs.needed == 'true'
         with:
           python-version: "3.13"
+      - name: Verify signing key transport
+        if: steps.assets.outputs.needed == 'true'
+        run: |
+          MYGO_UPDATE_PRIVATE_KEY=/synthetic/signing-key MYGO_UPDATER_PRIVATE_KEY=/synthetic/signing-key python - <<'PY'
+          import os
+          for name in ('MYGO_UPDATE_PRIVATE_KEY', 'MYGO_UPDATER_PRIVATE_KEY'):
+              assert os.environ[name] == '/synthetic/signing-key', 'Signing key environment was rewritten'
+          print('Signing key environment transport verified')
+          PY
       - name: Package signed Windows x64
         if: steps.assets.outputs.needed == 'true'
         env:
@@ -176,10 +187,16 @@ jobs:
         run: |
           [[ -n "$MYGO_UPDATE_PRIVATE_KEY" ]] || { echo "::error::Missing FORK_UPDATE_PRIVATE_KEY secret"; exit 1; }
           python - <<'PY'
-          import json, os
+          import base64, binascii, json, os
           config = json.load(open('mygo.json'))
           assert config['version'] == os.environ['FORK_VERSION'], 'Release tag version mismatch'
           assert config['updates']['github'] == os.environ['GITHUB_REPOSITORY'], 'Wrong update repository'
+          try:
+              key = base64.b64decode(os.environ['MYGO_UPDATE_PRIVATE_KEY'].strip(), validate=True)
+          except binascii.Error:
+              raise SystemExit('Invalid signing key encoding') from None
+          assert len(key) == 64, 'Invalid signing key length'
+          assert base64.b64encode(key[32:]).decode() == config['updates']['publicKey'], 'Signing key does not match update identity'
           PY
           python3() { python "$@"; }
           export -f python3

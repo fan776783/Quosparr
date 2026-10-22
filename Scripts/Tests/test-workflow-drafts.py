@@ -156,6 +156,7 @@ class DraftWorkflowTests(unittest.TestCase):
                        FORK_VERSION=version, GH_RELEASE_FIXTURE=json.dumps(release),
                        GH_CAPTURE=str(capture), GH_CAPTURE_EXIT=str(gh_exit), GO_CAPTURE_EXIT=str(go_exit),
                        RUNNER_TEMP=str(root), GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(root / "summary"),
+                       MSYS2_ENV_CONV_EXCL=self.workflows["fork-sync.yml"]["jobs"]["windows-release"]["env"]["MSYS2_ENV_CONV_EXCL"],
                        GH_TOKEN="offline-command-recorder", GITHUB_REPOSITORY="fan776783/Quosparr", BASH_ENV="/dev/null")
             result = subprocess.run(["bash", "--noprofile", "--norc", "-euo", "pipefail", "-c", script],
                                     cwd=root, env=env, capture_output=True, text=True, timeout=10)
@@ -215,6 +216,15 @@ class DraftWorkflowTests(unittest.TestCase):
             result, calls, _ = self.invoke_windows_release("Upload Windows release assets", gh_exit=gh_exit, go_exit=go_exit)
             self.assertEqual(result.returncode, gh_exit or go_exit)
             self.assertEqual(len(calls), count, "failure must not expose the update manifest")
+
+    def test_windows_signing_keys_are_excluded_from_msys_path_conversion(self):
+        job = self.workflows["fork-sync.yml"]["jobs"]["windows-release"]
+        self.assertEqual(set(job["env"]["MSYS2_ENV_CONV_EXCL"].split(";")),
+                         {"MYGO_UPDATE_PRIVATE_KEY", "MYGO_UPDATER_PRIVATE_KEY"})
+        result, calls, _ = self.invoke_windows_release("Verify signing key transport")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, [])
+        self.assertIn("transport verified", result.stdout)
 
     def test_windows_release_builds_tag_and_requires_native_verification(self):
         jobs = self.workflows["fork-sync.yml"]["jobs"]
