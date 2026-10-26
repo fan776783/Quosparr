@@ -353,8 +353,7 @@ func (rt *liveApp) panelActions(s *Settings) PanelActions {
 		Refresh:        func() { rt.requestRefresh(s, "") },
 		RefreshSection: func(sec runway.Section) { rt.requestRefresh(s, sec) },
 		AuthorizeCursor: func() {
-			l := l10n.ForPreference(string(svc.Preferences().Language), rt.langs)
-			rt.requestCursorAuthorization(l)
+			rt.requestCursorAuthorization(s)
 		},
 		SetCursorMonitoring: func(on bool) {
 			if s != nil {

@@ -13,7 +13,7 @@ func renderCursorAccountsPage(c *ui.Context, u *settingsUI, f *accountForm, rt *
 	if f.kind != cursorAccountKind() {
 		return false
 	}
-	renderCursorAccount(c, u, rt.svc.Snapshot().Cursor, func() { rt.svc.RefreshCursor(true) }, func() { rt.requestCursorAuthorization(u.L()) })
+	renderCursorAccount(c, u, rt.svc.Snapshot().Cursor, func() { rt.svc.RefreshCursor(true) }, func() { rt.requestCursorAuthorization(u.s) })
 	return true
 }
 

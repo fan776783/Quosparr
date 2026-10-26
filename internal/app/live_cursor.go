@@ -17,24 +17,26 @@ import (
 )
 
 type cursorBridge struct {
-	mu                    sync.Mutex
-	promptMu              sync.Mutex
-	gate                  chan struct{}
-	enabled, refreshing   bool
-	generation            uint64
-	cancel                context.CancelFunc
-	onChange              func()
-	lc                    l10n.Localizer
-	identity, email, plan string
-	quota                 *cursor.Snapshot
-	caps                  map[string]int64 // last estimated cap per pool, this account only
-	err                   error
-	nextPoll, retryAt     time.Time
-	read                  func(context.Context) (cursor.Auth, error)
-	authorize             func(context.Context) error
-	clearAuth             func()
-	fetch                 func(context.Context, string) (cursor.Snapshot, error)
-	now                   func() time.Time
+	mu                     sync.Mutex
+	promptMu               sync.Mutex
+	gate                   chan struct{}
+	enabled, refreshing    bool
+	rememberAuthorization  bool
+	authorizationAttempted bool
+	generation             uint64
+	cancel                 context.CancelFunc
+	onChange               func()
+	lc                     l10n.Localizer
+	identity, email, plan  string
+	quota                  *cursor.Snapshot
+	caps                   map[string]int64 // last estimated cap per pool, this account only
+	err                    error
+	nextPoll, retryAt      time.Time
+	read                   func(context.Context) (cursor.Auth, error)
+	authorize              func(context.Context) error
+	clearAuth              func()
+	fetch                  func(context.Context, string) (cursor.Snapshot, error)
+	now                    func() time.Time
 }
 
 func newCursorBridge(home string, prefs store.Preferences, langs []string) *cursorBridge {
@@ -42,7 +44,8 @@ func newCursorBridge(home string, prefs store.Preferences, langs []string) *curs
 	reader := cursor.NewAuthReader(dir)
 	return &cursorBridge{
 		gate: make(chan struct{}, 1), enabled: prefs.CursorMonitoringEnabled,
-		lc: l10n.ForPreference(string(prefs.Language), langs), now: time.Now,
+		rememberAuthorization: prefs.CursorRememberAuthorization,
+		lc:                    l10n.ForPreference(string(prefs.Language), langs), now: time.Now,
 		read: reader.Read, authorize: reader.Authorize, clearAuth: reader.Clear,
 		fetch: (cursor.Client{}).Fetch,
 	}
@@ -62,10 +65,16 @@ func (b *cursorBridge) setPreferences(p store.Preferences, langs []string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.lc = l10n.ForPreference(string(p.Language), langs)
-	if b.enabled == p.CursorMonitoringEnabled {
+	revoked := b.rememberAuthorization && !p.CursorRememberAuthorization
+	if !b.rememberAuthorization && p.CursorRememberAuthorization {
+		b.authorizationAttempted = false
+	}
+	b.rememberAuthorization = p.CursorRememberAuthorization
+	if b.enabled == p.CursorMonitoringEnabled && !revoked {
 		return
 	}
 	b.enabled = p.CursorMonitoringEnabled
+	b.authorizationAttempted = false
 	b.generation++
 	if b.cancel != nil {
 		b.cancel()
@@ -118,7 +127,7 @@ func (b *cursorBridge) refresh(ctx context.Context, force, authorize bool) error
 		return nil
 	}
 	timeout := 30 * time.Second
-	if authorize {
+	if authorize || (b.rememberAuthorization && !b.authorizationAttempted) {
 		timeout = 2 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -137,6 +146,9 @@ func (b *cursorBridge) refresh(ctx context.Context, force, authorize bool) error
 		b.notify()
 	}()
 	if authorize && b.authorize != nil {
+		b.mu.Lock()
+		b.authorizationAttempted = true
+		b.mu.Unlock()
 		if err := b.authorize(ctx); err != nil {
 			viewErr := err
 			if ctx.Err() != nil {
@@ -147,6 +159,17 @@ func (b *cursorBridge) refresh(ctx context.Context, force, authorize bool) error
 		}
 	}
 	auth, err := b.read(ctx)
+	if b.takeRememberedAuthorization(gen, err) {
+		authorize = true
+		err = b.authorize(ctx)
+		if err == nil {
+			auth, err = b.read(ctx)
+		}
+		if ctx.Err() != nil {
+			b.authFailure(gen, cursor.ErrAuthorizationRequired)
+			return ctx.Err()
+		}
+	}
 	if err != nil {
 		b.authFailure(gen, err)
 		return err
@@ -161,6 +184,14 @@ func (b *cursorBridge) refresh(ctx context.Context, force, authorize bool) error
 		b.clearLocked()
 	}
 	b.identity, b.email, b.plan = id, auth.Email, auth.Plan
+	// A key obtained by a previous one-time grant may already be cached when
+	// consent becomes permanent. Do not turn later key rotation into a prompt.
+	if b.rememberAuthorization {
+		b.authorizationAttempted = true
+	}
+	if authorize {
+		b.err = nil
+	}
 	if now.Before(b.retryAt) {
 		if authorize {
 			b.err = &cursor.RateLimitedError{RetryAfter: b.retryAt.Sub(now)}
@@ -215,6 +246,18 @@ func (b *cursorBridge) refresh(ctx context.Context, force, authorize bool) error
 		b.quota = nil
 	}
 	return err
+}
+
+// Remembered consent permits one automatic Keychain attempt per monitoring
+// session. A denied, cancelled or stale key must never cause a polling loop.
+func (b *cursorBridge) takeRememberedAuthorization(gen uint64, err error) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if gen != b.generation || !b.enabled || !b.rememberAuthorization || b.authorizationAttempted || b.authorize == nil || !errors.Is(err, cursor.ErrAuthorizationRequired) {
+		return false
+	}
+	b.authorizationAttempted = true
+	return true
 }
 
 // keepCapsLocked remembers estimated caps and reuses them while a pool cannot

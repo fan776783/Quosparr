@@ -30,6 +30,28 @@ func TestCursorOptInDefaultsAndProviderLimits(t *testing.T) {
 	}
 }
 
+func TestCursorRememberAuthorizationRoundTrip(t *testing.T) {
+	p := DefaultPreferences()
+	data, err := EncodePreferences(p)
+	if err != nil || p.CursorRememberAuthorization || bytes.Contains(data, []byte("cursorRememberAuthorization")) {
+		t.Fatal("remembered authorization must default off and be omitted")
+	}
+	p.CursorRememberAuthorization = true
+	data, err = EncodePreferences(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := DecodePreferences(data)
+	if err != nil || !back.CursorRememberAuthorization || back.CursorMonitoringEnabled {
+		t.Fatal("remembered consent must persist independently without enabling monitoring")
+	}
+	back.CursorRememberAuthorization = false
+	data, err = EncodePreferences(back)
+	if err != nil || bytes.Contains(data, []byte("cursorRememberAuthorization")) {
+		t.Fatal("revoked consent survived encoding")
+	}
+}
+
 func TestCursorStatusBarGroupsRoundTripWithLegacyPair(t *testing.T) {
 	p := DefaultPreferences()
 	groups := [][]Provider{{ProviderCodex, ProviderClaude}, {ProviderCursor}, {ProviderGrok}}

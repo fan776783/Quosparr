@@ -8,7 +8,8 @@ import (
 )
 
 // AuthReader owns one monitoring session's derived key. Read never requests
-// Keychain access. Only an explicit Authorize call may display a system prompt.
+// Keychain access. Authorize may display a system prompt; callers must obtain
+// explicit or remembered user consent before calling it.
 type AuthReader struct {
 	dir         string
 	mu          sync.Mutex

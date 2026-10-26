@@ -1,6 +1,7 @@
 package app
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -73,6 +74,18 @@ func (u *settingsUI) cursorGroup(c *ui.Context) {
 				s.SetCursorMonitoringEnabled(v)
 			}
 		})
+		if runtime.GOOS == "darwin" {
+			row(l.CursorAuthorization("permanent"), l.CursorAuthorization("rememberHint"), func() {
+				p := s.Prefs()
+				if v, ok := toggle(c, "cursor-remember-authorization", l.CursorAuthorization("permanent"), p.CursorRememberAuthorization, s.ReadOnly() || (!p.CursorMonitoringEnabled && !p.CursorRememberAuthorization)); ok {
+					if !v {
+						s.SetCursorRememberAuthorization(false)
+					} else if rt := currentRuntime(); rt != nil {
+						rt.requestCursorAuthorization(s)
+					}
+				}
+			})
+		}
 	})
 }
 
