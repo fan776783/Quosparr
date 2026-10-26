@@ -27,7 +27,7 @@ func panelHeader(c *ui.Context, a *App, l l10n.Localizer, prefs store.Preference
 			ui.Spacer(c).Grow(1)
 			panelHeaderButtons(c, a, l, prefs, acts, panelBusy(snap, grokView))
 		})
-		if providers := prefs.PanelSelection(); len(providers) > 1 {
+		if providers := prefs.DisplayPanelSelection(); len(providers) > 1 {
 			providerStrip(c, a, l, snap, providers, prefs.SelectedProvider, acts.SelectProvider)
 		}
 		if prefs.SelectedProvider == store.ProviderCursor {

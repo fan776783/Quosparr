@@ -41,8 +41,8 @@ func (u *settingsUI) appearanceGroup(c *ui.Context) {
 		return tx(l, xMacOnly)
 	}
 	settingsGroup(c, l.Text(l10n.KeyDisplayAppearanceSection), "", nil, func(row rowFunc) {
-		u.panelProviderRows(c, row, p, ro)
-		if providers := p.PanelSelection(); len(providers) > 1 {
+		u.panelProviderRowsFor(c, row, p, ro, store.DisplayProviders())
+		if providers := p.DisplayPanelSelection(); len(providers) > 1 {
 			row(tx(l, xProvider), tx(l, xProviderDescription), func() {
 				selected := max(0, slices.Index(providers, p.SelectedProvider))
 				if providerTabsOf(c.Key("provider"), providers, &selected, ro, providerLabels(l, providers)...) {
@@ -117,6 +117,10 @@ func (u *settingsUI) fontControl(c *ui.Context, cur string, ro bool) {
 // a custom set of at least one. Turning custom on keeps every provider
 // checked, so the panel does not change until one is unchecked.
 func (u *settingsUI) panelProviderRows(c *ui.Context, row rowFunc, p store.Preferences, ro bool) {
+	u.panelProviderRowsFor(c, row, p, ro, store.Providers())
+}
+
+func (u *settingsUI) panelProviderRowsFor(c *ui.Context, row rowFunc, p store.Preferences, ro bool, providers []store.Provider) {
 	s, l := u.s, u.L()
 	custom := len(p.PanelProviders) > 0
 	row(tx(l, xPanelProviders), tx(l, xPanelProvidersHint), func() {
@@ -129,7 +133,7 @@ func (u *settingsUI) panelProviderRows(c *ui.Context, row rowFunc, p store.Prefe
 			}, ro); ok {
 			var next []store.Provider
 			if v {
-				next = store.Providers()
+				next = providers
 			}
 			s.SetPanelProviders(next)
 		}
@@ -143,7 +147,7 @@ func (u *settingsUI) panelProviderRows(c *ui.Context, row rowFunc, p store.Prefe
 			selected[item] = true
 		}
 		ui.Row(c).Gap(12).Wrap().Children(func() {
-			for _, prov := range store.Providers() {
+			for _, prov := range providers {
 				on := selected[prov]
 				// Dropping the last one is not offered.
 				box := ui.Checkbox(c.Key("panel-prov-"+string(prov)), &on, l.Text(providerKey(prov))).
@@ -153,7 +157,7 @@ func (u *settingsUI) panelProviderRows(c *ui.Context, row rowFunc, p store.Prefe
 				}
 				selected[prov] = on
 				next := make([]store.Provider, 0, len(selected))
-				for _, item := range store.Providers() {
+				for _, item := range providers {
 					if selected[item] {
 						next = append(next, item)
 					}

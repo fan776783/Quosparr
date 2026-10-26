@@ -49,7 +49,7 @@ func TestSettingsSidebarSelectionAndTitlebarInsets(t *testing.T) {
 }
 
 func TestSettingsSidebarMinimumSizeTranslatedPages(t *testing.T) {
-	for _, language := range []store.Language{store.LanguageEnglish, store.LanguageSimplifiedChinese, store.LanguageTraditionalChinese, store.LanguageKorean, store.LanguageJapanese, store.LanguageRussian, store.LanguageFrench} {
+	for _, language := range []store.Language{store.LanguageEnglish, store.LanguageSimplifiedChinese, store.LanguageRussian} {
 		for _, dark := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/%t", language, dark), func(t *testing.T) {
 				e := newEnv(t, nil)

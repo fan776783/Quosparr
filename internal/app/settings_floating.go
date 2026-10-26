@@ -92,7 +92,7 @@ func (u *settingsUI) floatingProviderRows(c *ui.Context, row rowFunc, p store.Pr
 			selected[item] = true
 		}
 		ui.Row(c).Gap(12).Wrap().Children(func() {
-			for _, prov := range store.Providers() {
+			for _, prov := range store.DisplayProviders() {
 				on := selected[prov]
 				// Dropping the last one is not offered.
 				box := ui.Checkbox(c.Key("fw-prov-"+string(prov)), &on, l.Text(providerKey(prov))).
@@ -102,7 +102,7 @@ func (u *settingsUI) floatingProviderRows(c *ui.Context, row rowFunc, p store.Pr
 				}
 				selected[prov] = on
 				next := make([]store.Provider, 0, len(selected))
-				for _, item := range store.Providers() {
+				for _, item := range store.DisplayProviders() {
 					if selected[item] {
 						next = append(next, item)
 					}

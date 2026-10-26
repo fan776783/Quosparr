@@ -49,3 +49,15 @@ bash Scripts/fork-release.sh
 - Cursor 专有字段、初始化与测试条件独立成行，避免修改上游字段组及长条件表达式；新增逻辑优先放在现有 `cursor_*.go` 文件中。
 - 不对 README、AGENTS.md 或业务代码配置全局 ours/theirs 策略；上游的新功能与 Cursor 功能必须同时保留。版本、更新仓库与公钥由配置叠加脚本明确维护。
 - `python3 Scripts/Tests/test-fork-merge.py` 使用临时 Git 仓库验证版本冲突、源码冲突回滚、配置保留与重复同步。
+
+## Cursor 隔离约定
+
+为降低后续同步冲突，保留上游通用入口的含义，通过小范围显式接线扩展显示能力，不复制整份上游业务文件，也不按整侧覆盖冲突。
+
+- `store.Providers()` 继续表示上游账号 / CLI 服务商。账号、会话、Skills、MCP、模型价格及上游通用测试都使用它；不要为了显示 Cursor 往该列表追加条目。
+- `internal/store/cursor.go` 提供 `DisplayProviders()`、`DisplayPanelSelection()` 与 `CursorPreferences`。面板、状态栏、悬浮窗及只读账号页显式采用显示列表；保留既有 `cursorMonitoringEnabled`、`selectedProvider` 和列表字段的 JSON 格式，不重置用户配置。上游的 `PanelSelection()` 保留基础列表语义。
+- 账号页只保留 `renderCursorAccountsPage` / `cursorAccountTabs` 接线，Cursor 页签位置由上游服务商数量计算；授权、读取与额度投影仍放在 `cursor_*.go`、`*_cursor.go` 或 `internal/cursor/` 中。
+- Cursor 基础文案放在 `internal/l10n/cursor_catalog.go`，授权文案放在 `cursor_authorization.go`；通过统一查询入口返回，不修改上游 `tables.go` / `allKeys` 的冻结集合。独立测试覆盖七语言、英文回退及扩展键完整性。
+- Cursor 专项测试使用独立的 `cursor_*_test.go`、`*_cursor_test.go` 或 `internal/cursor/` 文件。上游新增测试应能直接运行，不逐个改成“跳过 Cursor”；显示扩展与基础列表分别验证。
+- 当前必要的共享测试差异仅是 `internal/store/preferences_test.go` 的未知枚举样例：fork 已支持 `cursor`，因此改用仍未知的 `gemini`。这属于实际配置协议扩展，不能靠改运行时行为或跳过测试隐藏。
+- 同步前可用 `git diff origin/main -- '*_test.go'` 复核：新增专项文件不算上游测试侵入，共享文件上的额外差异需要逐项解释。隔离减少文本冲突，不保证上游接口或配置语义变更永远无需人工适配。

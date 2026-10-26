@@ -23,7 +23,7 @@ func (a *App) OpenWidgetURL(raw string) bool {
 		provider = store.ProviderCodex
 	}
 	detail := widgetSectionModule(link.Section)
-	if !slices.Contains(prefs.PanelSelection(), provider) {
+	if !slices.Contains(prefs.DisplayPanelSelection(), provider) {
 		// A widget may show a provider the panel hides: the panel stays on
 		// its own provider and opens the overview.
 		provider, detail = prefs.SelectedProvider, ""

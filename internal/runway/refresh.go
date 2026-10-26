@@ -295,7 +295,7 @@ func (s *Service) quotaWantedLocked(p store.Provider) bool {
 	if p == store.ProviderCursor && !s.prefs.CursorMonitoringEnabled {
 		return false
 	}
-	return s.showsProviderLocked(p) || slices.Contains(s.prefs.PanelSelection(), p)
+	return s.showsProviderLocked(p) || slices.Contains(s.prefs.DisplayPanelSelection(), p)
 }
 
 func (s *Service) widgetNeedsLocked() bool {

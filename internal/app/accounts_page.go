@@ -23,7 +23,6 @@ const (
 	accountKindCodex = iota
 	accountKindClaude
 	accountKindGrok
-	accountKindCursor
 )
 
 // accountsPage is wired from settings_view.go.
@@ -36,13 +35,14 @@ func renderAccountsPage(c *ui.Context, u *settingsUI) {
 		ui.Text(c, l.Text(l10n.KeyNotLoaded)).FontSize(12).TextColor(c.Theme().TextMuted)
 		return
 	}
+	if renderCursorAccountsPage(c, u, f, rt) {
+		return
+	}
 	switch f.kind {
 	case accountKindCodex:
 		renderCodexAccounts(c, u, f, rt)
 	case accountKindGrok:
 		renderGrokAccounts(c, u, f, rt)
-	case accountKindCursor:
-		renderCursorAccount(c, u, rt.svc.Snapshot().Cursor, func() { rt.svc.RefreshCursor(true) }, func() { rt.requestCursorAuthorization(l) })
 	default:
 		renderClaudeAccounts(c, u, f, rt)
 	}
@@ -177,8 +177,7 @@ func (u *settingsUI) previewClaudeFile(f *accountForm, rt *liveApp) {
 func accountProviderHeader(c *ui.Context, u *settingsUI, f *accountForm) {
 	l := u.L()
 	ui.Row(c).Children(func() {
-		providers := store.Providers()
-		if providerTabsOf(c.Key("accounts-provider"), providers, &f.kind, f.busy, providerLabels(l, providers)...) {
+		if cursorAccountTabs(c.Key("accounts-provider"), l, &f.kind, f.busy) {
 			f.mode, f.paste = "", ""
 			f.selection, f.api = nil, apiDraft{}
 		}
@@ -243,7 +242,7 @@ func (u *settingsUI) accountNotice(f *accountForm, msg string) {
 	if msg == "" || msg == l.Text(l10n.KeyAccountsOAuthCancelled) {
 		return
 	}
-	providers := store.Providers()
+	providers := store.DisplayProviders()
 	title := l.Text(providerKey(providers[min(max(f.kind, 0), len(providers)-1)]))
 	u.showNotice(title, msg)
 }

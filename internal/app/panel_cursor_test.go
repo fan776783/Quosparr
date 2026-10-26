@@ -79,7 +79,7 @@ func TestCursorPanelFourTabsFitAndUsageLinkWorks(t *testing.T) {
 				p.Language = lang
 			}, snap, PanelActions{})
 			tt.SetDark(dark)
-			for _, p := range store.Providers() {
+			for _, p := range store.DisplayProviders() {
 				label := a.L().Text(providerKey(p))
 				r, ok := tt.Find(label)
 				if !ok || r.W <= 0 || r.X < 0 || r.X+r.W > panelWidth {
@@ -103,10 +103,10 @@ func TestCursorPanelFourTabsFitAndUsageLinkWorks(t *testing.T) {
 }
 
 func TestCursorDoesNotEnterCLIManagementTabs(t *testing.T) {
-	if len(store.Providers()) != 4 || len(store.CLIProviders()) != 3 || skillsTrashTab != len(store.CLIProviders()) {
+	if len(store.DisplayProviders()) != len(store.Providers())+1 || skillsTrashTab != len(store.Providers()) {
 		t.Fatal("management providers conflict with trash")
 	}
-	for _, p := range store.CLIProviders() {
+	for _, p := range store.Providers() {
 		if p == store.ProviderCursor {
 			t.Fatal("quota-only provider entered CLI management")
 		}
@@ -132,7 +132,7 @@ func TestCursorAccountTabShowsReadOnlyIdentityAndRefresh(t *testing.T) {
 	tt := ui.NewTester(func(c *ui.Context) {
 		ui.Column(c).Fill().Padding(16).Gap(14).Children(func() {
 			accountProviderHeader(c, u, f)
-			if f.kind == accountKindCursor {
+			if f.kind == cursorAccountKind() {
 				renderCursorAccount(c, u, s, func() { refreshes++ }, nil)
 			}
 		})
@@ -140,7 +140,7 @@ func TestCursorAccountTabShowsReadOnlyIdentityAndRefresh(t *testing.T) {
 	if err := tt.Click("Cursor"); err != nil {
 		t.Fatal(err)
 	}
-	if f.kind != accountKindCursor || f.mode != "" || f.paste != "" {
+	if f.kind != cursorAccountKind() || f.mode != "" || f.paste != "" {
 		t.Fatal("Cursor tab did not open or retained another provider's editor")
 	}
 	if tt.HasText(s.Email) || !tt.HasText(accountPrivate(true, s.Email)) || !tt.HasText(s.Plan) || !tt.HasText("Auto · 75%") {
@@ -195,7 +195,7 @@ func TestCursorAccountMinimumWidthTranslated(t *testing.T) {
 					u := cardSettingsUI(t, lang)
 					u.s.SetCursorMonitoringEnabled(enabled)
 					f := accountFormOf(u)
-					f.kind = accountKindCursor
+					f.kind = cursorAccountKind()
 					state := runway.CursorState{Availability: runway.CursorReady, Email: "tester@example.invalid", Plan: "Team", Meters: []runway.Meter{{Title: "Auto", RemainingPercent: 75}}}
 					const width = settingsMinWidth - settingsSidebarWidth
 					tt := ui.NewTester(func(c *ui.Context) {
@@ -206,7 +206,7 @@ func TestCursorAccountMinimumWidthTranslated(t *testing.T) {
 						})
 					}, width, 900)
 					tt.SetDark(dark)
-					for _, p := range store.Providers() {
+					for _, p := range store.DisplayProviders() {
 						r, ok := tt.Find(u.L().Text(providerKey(p)))
 						if !ok || r.W <= 0 || r.X < 0 || r.X+r.W > width {
 							t.Fatalf("provider %s outside account content: %+v", p, r)

@@ -120,8 +120,7 @@ type Preferences struct {
 	// ShowsSkills is Go-only: the skills module, on by default and written
 	// only when turned off.
 	ShowsSkills bool `json:"showsSkills"`
-	// CursorMonitoringEnabled opts in to read-only access to Cursor's current login.
-	CursorMonitoringEnabled bool `json:"cursorMonitoringEnabled,omitempty"`
+	CursorPreferences
 	// FloatingWindow is Go-only: the desktop floating window, omitted while
 	// it is at its default.
 	FloatingWindow FloatingWindow `json:"floatingWindow,omitzero"`
@@ -216,7 +215,7 @@ func (p Preferences) StatusBarSelection() []Provider {
 
 // canonicalStatusBarProviders keeps one or two known providers, drops
 // duplicates, and sorts them into Providers() order.
-func canonicalStatusBarProviders(in []Provider) []Provider { return canonicalProviders(in, 2) }
+func canonicalStatusBarProviders(in []Provider) []Provider { return canonicalDisplayProviders(in, 2) }
 
 // canonicalProviders keeps up to limit known providers, drops duplicates,
 // and sorts them into Providers() order.
@@ -277,7 +276,7 @@ func (p Preferences) PanelSelection() []Provider {
 // normalizePanelProviders keeps the custom panel list canonical, empty for
 // every provider, and moves the selected provider onto a shown one.
 func (p *Preferences) normalizePanelProviders() {
-	p.PanelProviders = canonicalProviders(p.PanelProviders, len(Providers()))
+	p.PanelProviders = canonicalDisplayProviders(p.PanelProviders, len(DisplayProviders()))
 	if len(p.PanelProviders) == 0 {
 		p.PanelProviders = nil
 		return

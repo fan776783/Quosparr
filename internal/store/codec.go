@@ -201,7 +201,7 @@ func readPanelProviders(r *reader, key string) []Provider {
 	for _, id := range ids {
 		out = append(out, Provider(id))
 	}
-	return canonicalProviders(out, len(Providers()))
+	return canonicalDisplayProviders(out, len(DisplayProviders()))
 }
 
 // readResetTimeFormat decodes the Go-only reset time format leniently, as

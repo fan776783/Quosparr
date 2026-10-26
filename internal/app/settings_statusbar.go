@@ -136,11 +136,11 @@ func (u *settingsUI) statusBarArrangement(c *ui.Context, p store.Preferences, of
 			s.SetStatusBarGroups(statusBarGroupsOf(next))
 		}
 	}
-	order := make([]store.Provider, 0, len(store.Providers()))
+	order := make([]store.Provider, 0, len(store.DisplayProviders()))
 	for _, slot := range slots {
 		order = append(order, slot.prov)
 	}
-	for _, prov := range store.Providers() {
+	for _, prov := range store.DisplayProviders() {
 		if !slices.Contains(order, prov) {
 			order = append(order, prov)
 		}

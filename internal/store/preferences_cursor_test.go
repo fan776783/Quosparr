@@ -46,3 +46,29 @@ func TestCursorStatusBarGroupsRoundTripWithLegacyPair(t *testing.T) {
 		t.Fatalf("groups or legacy pair lost: %+v", back.StatusBar)
 	}
 }
+
+func TestCursorDisplaySelectionPreservesStoredFourProviderLists(t *testing.T) {
+	p := DefaultPreferences()
+	if !reflect.DeepEqual(p.PanelSelection(), Providers()) || !reflect.DeepEqual(p.DisplayPanelSelection(), DisplayProviders()) {
+		t.Fatal("base and display defaults were conflated")
+	}
+	p.CursorMonitoringEnabled = true
+	p.SelectedProvider = ProviderCursor
+	p.PanelProviders = DisplayProviders()
+	data, err := EncodePreferences(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := DecodePreferences(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(back.DisplayPanelSelection(), DisplayProviders()) || back.SelectedProvider != ProviderCursor || !back.CursorMonitoringEnabled {
+		t.Fatal("existing Cursor preferences lost")
+	}
+	p.PanelProviders = []Provider{ProviderCursor}
+	p.Normalize()
+	if !reflect.DeepEqual(p.DisplayPanelSelection(), []Provider{ProviderCursor}) || p.SelectedProvider != ProviderCursor {
+		t.Fatal("Cursor-only panel was reset")
+	}
+}

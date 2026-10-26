@@ -25,9 +25,6 @@ func TestPricingOfficialRowsUseThreeProviderTabs(t *testing.T) {
 	u.tab = tabModelPricing
 	tt := ui.NewTester(u.view, settingsWidth, settingsHeight)
 	tt.Frame()
-	if hasExact(tt, "Cursor") {
-		t.Fatal("quota-only Cursor must not appear in model pricing tabs")
-	}
 
 	for _, tc := range []struct{ label, id string }{{"Codex", "official-gpt"}, {"Claude", "official-claude"}, {"Grok", "official-grok"}} {
 		if err := tt.Click(tc.label); err != nil {

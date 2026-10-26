@@ -13,19 +13,13 @@ const (
 	ProviderCodex  Provider = "codex"
 	ProviderClaude Provider = "claude"
 	ProviderGrok   Provider = "grok"
-	ProviderCursor Provider = "cursor"
 )
 
-// Providers returns every valid Provider, in display order.
-func Providers() []Provider {
-	return []Provider{ProviderCodex, ProviderClaude, ProviderGrok, ProviderCursor}
-}
-
-// CLIProviders support account switching, sessions, Skills and MCP management.
-func CLIProviders() []Provider { return []Provider{ProviderCodex, ProviderClaude, ProviderGrok} }
+// Providers returns the upstream account and CLI providers, in display order.
+func Providers() []Provider { return []Provider{ProviderCodex, ProviderClaude, ProviderGrok} }
 
 // Valid reports whether v is a known value.
-func (v Provider) Valid() bool { return slices.Contains(Providers(), v) }
+func (v Provider) Valid() bool { return v == ProviderCursor || slices.Contains(Providers(), v) }
 
 // Language is the user's language preference.
 type Language string

@@ -29,10 +29,10 @@ func (l Localizer) Language() Language { return l.lang }
 // key absent from both yields the key's raw value. A present-but-empty
 // translation is returned as is.
 func (l Localizer) Text(key Key) string {
-	if s, ok := tables[l.lang][key]; ok {
+	if s, ok := Lookup(l.lang, key); ok {
 		return s
 	}
-	if s, ok := tables[English][key]; ok {
+	if s, ok := Lookup(English, key); ok {
 		return s
 	}
 	return string(key)
@@ -61,19 +61,22 @@ func (l Localizer) ResetTypeName(raw string) string {
 // Lookup returns the translation stored for lang and key without any
 // fallback.
 func Lookup(lang Language, key Key) (string, bool) {
-	s, ok := tables[lang][key]
+	if s, ok := tables[lang][key]; ok {
+		return s, true
+	}
+	s, ok := cursorTables[lang][key]
 	return s, ok
 }
 
 // Keys returns every key in declaration order.
-func Keys() []Key { return append([]Key(nil), allKeys...) }
+func Keys() []Key { return append(append([]Key(nil), allKeys...), cursorKeys...) }
 
 // MissingTranslations lists keys that lang does not translate (absent or
 // blank), matching the Swift L10n.missingTranslations.
 func MissingTranslations(lang Language) []Key {
 	var out []Key
-	for _, k := range allKeys {
-		if s, ok := tables[lang][k]; !ok || isBlank(s) {
+	for _, k := range Keys() {
+		if s, ok := Lookup(lang, k); !ok || isBlank(s) {
 			out = append(out, k)
 		}
 	}

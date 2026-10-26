@@ -116,7 +116,7 @@ func (f *FloatingWindow) normalize() {
 	if !f.Style.Valid() {
 		f.Style = FloatingStyleCapsule
 	}
-	f.Providers = canonicalProviders(f.Providers, MaxFloatingProviders)
+	f.Providers = canonicalDisplayProviders(f.Providers, MaxFloatingProviders)
 	if len(f.Providers) == 0 {
 		f.Providers = nil
 	}
@@ -155,7 +155,7 @@ func (f FloatingWindow) HasApp(id string) bool {
 // FloatingSelection is what the floating window shows: the chosen
 // providers, or the main panel's.
 func (p Preferences) FloatingSelection() []Provider {
-	if sel := canonicalProviders(p.FloatingWindow.Providers, MaxFloatingProviders); len(sel) > 0 {
+	if sel := canonicalDisplayProviders(p.FloatingWindow.Providers, MaxFloatingProviders); len(sel) > 0 {
 		return sel
 	}
 	if p.SelectedProvider.Valid() {

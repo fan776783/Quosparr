@@ -21,7 +21,7 @@ func providerKey(v store.Provider) l10n.Key {
 	}
 }
 
-func providerTabLabels(l l10n.Localizer) []string { return providerLabels(l, store.CLIProviders()) }
+func providerTabLabels(l l10n.Localizer) []string { return providerLabels(l, store.Providers()) }
 
 func providerLabels(l l10n.Localizer, providers []store.Provider) []string {
 	labels := make([]string, 0, len(providers))
