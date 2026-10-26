@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -181,5 +182,44 @@ func TestCursorIdentityObeysPrivacyAndCannotOpenAccountManagement(t *testing.T) 
 	}
 	if a.panelState.detail != "" {
 		t.Fatal("read-only Cursor identity opened account management")
+	}
+}
+
+// The account page has a wider content area than the menu panel, but also
+// includes localized opt-in controls and a refresh action.
+func TestCursorAccountMinimumWidthTranslated(t *testing.T) {
+	for _, lang := range []store.Language{store.LanguageEnglish, store.LanguageSimplifiedChinese, store.LanguageTraditionalChinese, store.LanguageKorean, store.LanguageJapanese, store.LanguageRussian, store.LanguageFrench} {
+		for _, dark := range []bool{false, true} {
+			for _, enabled := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/dark=%t/enabled=%t", lang, dark, enabled), func(t *testing.T) {
+					u := cardSettingsUI(t, lang)
+					u.s.SetCursorMonitoringEnabled(enabled)
+					f := accountFormOf(u)
+					f.kind = accountKindCursor
+					state := runway.CursorState{Availability: runway.CursorReady, Email: "tester@example.invalid", Plan: "Team", Meters: []runway.Meter{{Title: "Auto", RemainingPercent: 75}}}
+					const width = settingsMinWidth - settingsSidebarWidth
+					tt := ui.NewTester(func(c *ui.Context) {
+						applyTheme(c)
+						ui.Column(c).Fill().Padding(16).Gap(14).Children(func() {
+							accountProviderHeader(c, u, f)
+							renderCursorAccount(c, u, state, func() {})
+						})
+					}, width, 900)
+					tt.SetDark(dark)
+					for _, p := range store.Providers() {
+						r, ok := tt.Find(u.L().Text(providerKey(p)))
+						if !ok || r.W <= 0 || r.X < 0 || r.X+r.W > width {
+							t.Fatalf("provider %s outside account content: %+v", p, r)
+						}
+					}
+					for _, text := range tt.Texts() {
+						r, ok := tt.Find(text)
+						if !ok || r.X < -0.5 || r.X+r.W > width+0.5 {
+							t.Fatalf("text %q outside account content: %+v", text, r)
+						}
+					}
+				})
+			}
+		}
 	}
 }
