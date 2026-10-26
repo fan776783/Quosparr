@@ -332,6 +332,9 @@ func (rt *liveApp) stop() {
 		rt.pricing.close()
 	}
 	rt.closePreferences()
+	if rt.cursorB != nil {
+		rt.cursorB.close()
+	}
 	rt.svc.Close()
 	if rt.repo != nil {
 		_ = rt.repo.Close()
@@ -349,6 +352,10 @@ func (rt *liveApp) panelActions(s *Settings) PanelActions {
 		PricingVersion: rt.pricingVersion,
 		Refresh:        func() { rt.requestRefresh(s, "") },
 		RefreshSection: func(sec runway.Section) { rt.requestRefresh(s, sec) },
+		AuthorizeCursor: func() {
+			l := l10n.ForPreference(string(svc.Preferences().Language), rt.langs)
+			rt.requestCursorAuthorization(l)
+		},
 		SetCursorMonitoring: func(on bool) {
 			if s != nil {
 				s.SetCursorMonitoringEnabled(on)

@@ -41,6 +41,7 @@ func panelCursorQuota(c *ui.Context, l l10n.Localizer, p store.Preferences, s ru
 		if s.Stale {
 			dimText(c, l.Text(l10n.KeyCursorStale))
 		}
+		cursorAuthorizationButton(c, l, s, acts.AuthorizeCursor)
 		ui.Column(c).Gap(12).Children(func() {
 			for _, m := range s.Meters {
 				grokMeterRow(c.Key("cursor-pool-"+m.Title), l, m, true, time.Now(), st.resetSwitch(p.QuotaResetTimeFormat))
@@ -75,7 +76,7 @@ func (u *settingsUI) cursorGroup(c *ui.Context) {
 	})
 }
 
-func renderCursorAccount(c *ui.Context, u *settingsUI, s runway.CursorState, refresh func()) {
+func renderCursorAccount(c *ui.Context, u *settingsUI, s runway.CursorState, refresh func(), authorize func()) {
 	u.cursorGroup(c)
 	p, l := u.s.Prefs(), u.L()
 	if !p.CursorMonitoringEnabled {
@@ -95,8 +96,18 @@ func renderCursorAccount(c *ui.Context, u *settingsUI, s runway.CursorState, ref
 			summary = s.LastError
 		}
 		dimText(c, accountUpdatedSummary(l, summary, s.UpdatedAt))
+		cursorAuthorizationButton(c, l, s, authorize)
 		if linkButton(c, l.Text(l10n.KeyCursorOpenUsage)).Clicked() {
 			c.OpenURL(cursorUsageURL)
 		}
 	})
+}
+
+func cursorAuthorizationButton(c *ui.Context, l l10n.Localizer, s runway.CursorState, authorize func()) {
+	if !s.NeedsAuthorization {
+		return
+	}
+	if accentButton(c, icPlug, l.CursorAuthorization("action"), s.Refreshing || authorize == nil).Clicked() && authorize != nil {
+		authorize()
+	}
 }

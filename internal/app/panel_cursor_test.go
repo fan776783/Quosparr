@@ -133,7 +133,7 @@ func TestCursorAccountTabShowsReadOnlyIdentityAndRefresh(t *testing.T) {
 		ui.Column(c).Fill().Padding(16).Gap(14).Children(func() {
 			accountProviderHeader(c, u, f)
 			if f.kind == accountKindCursor {
-				renderCursorAccount(c, u, s, func() { refreshes++ })
+				renderCursorAccount(c, u, s, func() { refreshes++ }, nil)
 			}
 		})
 	}, settingsMinWidth-settingsSidebarWidth, 640)
@@ -202,7 +202,7 @@ func TestCursorAccountMinimumWidthTranslated(t *testing.T) {
 						applyTheme(c)
 						ui.Column(c).Fill().Padding(16).Gap(14).Children(func() {
 							accountProviderHeader(c, u, f)
-							renderCursorAccount(c, u, state, func() {})
+							renderCursorAccount(c, u, state, func() {}, nil)
 						})
 					}, width, 900)
 					tt.SetDark(dark)
@@ -221,5 +221,26 @@ func TestCursorAccountMinimumWidthTranslated(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestCursorAuthorizationActionIsExplicitAndHiddenWhenUnavailable(t *testing.T) {
+	l := l10n.New(l10n.English)
+	s := runway.CursorState{NeedsAuthorization: true}
+	calls := 0
+	tt := ui.NewTester(func(c *ui.Context) { cursorAuthorizationButton(c, l, s, func() { calls++ }) }, 400, 90)
+	if err := tt.Click(l.CursorAuthorization("action")); err != nil || calls != 1 {
+		t.Fatal("authorization action missing")
+	}
+	s.Refreshing = true
+	tt.Frame()
+	_ = tt.Click(l.CursorAuthorization("action"))
+	if calls != 1 {
+		t.Fatal("authorization repeated while busy")
+	}
+	s.NeedsAuthorization = false
+	tt.Frame()
+	if tt.HasText(l.CursorAuthorization("action")) {
+		t.Fatal("unsupported login offered authorization")
 	}
 }

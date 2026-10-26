@@ -5,7 +5,7 @@
 **Cursor**
 
 - Experimental quota monitoring for the current Cursor desktop login: opt in from the Cursor tab, Display settings or Provider Accounts → Cursor. Like the official usage page, the panel shows Cursor models and other models separately, with this cycle's spend, an estimated cap (spend ÷ used percentage, marked as an estimate), reset times, additional spend and credit balances; quota meters also support the menu bar and floating window. Requests follow the application proxy.
-- Reads only the necessary login keys from the desktop SQLite store; no account switching, token refresh, conversation scanning or credential copies. Encrypted, memory-only and isolated-deployment logins are not supported yet. The internal API can change; a Team account has been verified against the official usage page; other plans and three-platform installation acceptance remain pending. Cursor is not yet available in widgets or CLI management.
+- Reads only the necessary login keys from the desktop SQLite store; no account switching, token refresh, conversation scanning or credential copies. macOS encrypted login is supported after explicit authorization: select “Authorize encrypted login” on the panel or account page. Only the derived key is cached in memory, cleared when monitoring is disabled or the app exits; authorize again after restart. Background refresh never requests Keychain access. Windows/Linux encryption, unknown formats, memory-only and isolated-deployment logins remain unsupported. The internal API can change; a Team account has been verified against the official usage page; other plans and three-platform installation acceptance remain pending. Cursor is not yet available in widgets or CLI management.
 
 **Display and CLI tools**
 
@@ -18,7 +18,7 @@ Local statistics and management below apply to Codex, Claude and Grok. Cursor cu
 **Cursor**
 
 - 实验性监控 Cursor 桌面当前登录：在 Cursor 栏位、显示设置或“服务商账号 → Cursor”中主动启用。面板按官方用量页分开展示 Cursor 模型与其他模型的用量，附本账期已花金额与估算总额（已花 ÷ 已用百分比，标注“估算”），以及重置时间、额外支出与 Credit 余额，额度条也可用于菜单栏和悬浮窗；请求遵循应用代理设置。
-- 只读取桌面 SQLite 中必要的登录字段，不切换账号、不刷新 token、不扫描对话、不复制凭据。加密、仅内存与独立部署的登录暂不支持。内部接口可能变化，已用 Team 账号对照官方用量页验证，其他套餐与三端安装验收仍待完成；Cursor 暂不接入 Widget 或 CLI 管理。
+- 只读取桌面 SQLite 中必要的登录字段，不切换账号、不刷新 token、不扫描对话、不复制凭据。macOS 加密登录可在面板或账号页点击“授权读取加密登录”后使用；只在内存缓存派生密钥，关闭监控或退出应用即清除，重启后需再次授权，后台刷新不请求钥匙串。Windows/Linux 加密、未知格式、仅内存与独立部署登录仍不支持。内部接口可能变化，已用 Team 账号对照官方用量页验证，其他套餐与三端安装验收仍待完成；Cursor 暂不接入 Widget 或 CLI 管理。
 
 **显示与 CLI 管理**
 
@@ -31,7 +31,7 @@ Local statistics and management below apply to Codex, Claude and Grok. Cursor cu
 **Cursor**
 
 - 實驗性監控 Cursor 桌面目前登入：在 Cursor 頁籤、顯示設定或「服務商帳號 → Cursor」中主動啟用。面板依官方用量頁分開顯示 Cursor 模型與其他模型的用量，附本帳期已花金額與估算總額（已花 ÷ 已用百分比，標註「估算」），以及重置時間、額外支出與 Credit 餘額，額度條也可用於選單列和懸浮視窗；請求遵循應用程式代理設定。
-- 唯讀桌面 SQLite 中必要的登入欄位，不切換帳號、不更新 token、不掃描對話、不複製憑證。加密、僅記憶體與獨立部署的登入暫不支援。內部介面可能變更，已用 Team 帳號對照官方用量頁驗證，其他方案與三平台安裝驗收仍待完成；Cursor 暫不接入 Widget 或 CLI 管理。
+- 唯讀桌面 SQLite 中必要的登入欄位，不切換帳號、不更新 token、不掃描對話、不複製憑證。macOS 加密登入可在面板或帳號頁點擊「授權讀取加密登入」後使用；衍生金鑰僅快取於記憶體，關閉監控或退出即清除，重新啟動後需再次授權，背景重新整理不存取鑰匙圈。Windows/Linux 加密、未知格式、僅記憶體與獨立部署登入仍不支援。內部介面可能變更，已用 Team 帳號對照官方用量頁驗證，其他方案與三平台安裝驗收仍待完成；Cursor 暫不接入 Widget 或 CLI 管理。
 
 **顯示與 CLI 管理**
 
@@ -44,7 +44,7 @@ Local statistics and management below apply to Codex, Claude and Grok. Cursor cu
 **Cursor**
 
 - 現在の Cursor デスクトップログインを対象とした実験的な使用量監視です。Cursor タブ、表示設定、または「プロバイダーアカウント → Cursor」で有効にすると、公式の使用量ページと同じく Cursor モデルとその他のモデルを分けて表示し、今期の支出額と推定上限（支出 ÷ 使用率、「推定」と表示）、リセット時刻、追加支出、クレジット残高を表示します。使用量バーはメニューバーとフローティングウィンドウにも対応し、リクエストはアプリのプロキシ設定に従います。
-- デスクトップの SQLite から必要なログインキーのみを読み取ります。アカウント切り替え、トークン更新、会話のスキャン、認証情報のコピーは行いません。暗号化、メモリ内のみ、個別デプロイのログインは未対応です。内部 API は変更される可能性があり、Team アカウントで公式の使用量ページと照合済みですが、その他のプランと 3 プラットフォームのインストール検証は未完了です。Cursor の Widget と CLI 管理は未対応です。
+- デスクトップの SQLite から必要なログインキーのみを読み取ります。アカウント切り替え、トークン更新、会話のスキャン、認証情報のコピーは行いません。macOS の暗号化ログインは、パネルまたはアカウント画面の読み取り許可ボタンから利用できます。派生鍵はメモリ内だけに保持し、監視の無効化や終了時に消去します。再起動後は再度許可が必要で、バックグラウンド更新ではキーチェーンにアクセスしません。Windows/Linux の暗号化、未知の形式、メモリ内のみ、個別デプロイは未対応です。内部 API は変更される可能性があり、Team アカウントで公式の使用量ページと照合済みですが、その他のプランと 3 プラットフォームのインストール検証は未完了です。Cursor の Widget と CLI 管理は未対応です。
 
 **表示と CLI 管理**
 
@@ -57,7 +57,7 @@ Local statistics and management below apply to Codex, Claude and Grok. Cursor cu
 **Cursor**
 
 - 현재 Cursor 데스크톱 로그인의 실험적 사용량 모니터링입니다. Cursor 탭, 표시 설정 또는 "공급자 계정 → Cursor"에서 켜면 공식 사용량 페이지처럼 Cursor 모델과 기타 모델을 나누어 표시하고, 이번 주기 지출액과 추정 한도(지출 ÷ 사용률, "추정"으로 표시), 재설정 시각, 추가 지출과 크레딧 잔액을 보여 줍니다. 사용량 막대는 메뉴 막대와 플로팅 창에서도 사용할 수 있으며 요청은 앱의 프록시 설정을 따릅니다.
-- 데스크톱 SQLite에서 필요한 로그인 키만 읽습니다. 계정 전환, 토큰 갱신, 대화 스캔이나 자격 증명 복사는 하지 않습니다. 암호화, 메모리 전용, 별도 배포 로그인은 아직 지원하지 않습니다. 내부 API는 변경될 수 있으며 Team 계정으로 공식 사용량 페이지와 대조해 확인했으며, 다른 요금제와 세 플랫폼 설치 검증은 아직 필요합니다. Cursor 위젯과 CLI 관리는 제공하지 않습니다.
+- 데스크톱 SQLite에서 필요한 로그인 키만 읽습니다. 계정 전환, 토큰 갱신, 대화 스캔이나 자격 증명 복사는 하지 않습니다. macOS 암호화 로그인은 패널 또는 계정 페이지의 읽기 허용 버튼으로 사용할 수 있습니다. 파생 키는 메모리에만 보관하고 모니터링을 끄거나 종료하면 지웁니다. 재시작 후 다시 허용해야 하며 백그라운드 새로 고침은 키체인에 접근하지 않습니다. Windows/Linux 암호화, 알 수 없는 형식, 메모리 전용 및 별도 배포 로그인은 지원하지 않습니다. 내부 API는 변경될 수 있으며 Team 계정으로 공식 사용량 페이지와 대조해 확인했으며, 다른 요금제와 세 플랫폼 설치 검증은 아직 필요합니다. Cursor 위젯과 CLI 관리는 제공하지 않습니다.
 
 **표시 및 CLI 관리**
 
@@ -70,7 +70,7 @@ Local statistics and management below apply to Codex, Claude and Grok. Cursor cu
 **Cursor**
 
 - Suivi expérimental du quota de la connexion actuelle à Cursor : à activer dans l’onglet Cursor, les réglages d’affichage ou « Comptes fournisseurs → Cursor ». Comme la page d’utilisation officielle, le panneau distingue les modèles Cursor et les autres modèles, avec les dépenses du cycle et un plafond estimé (dépenses ÷ pourcentage utilisé, signalé comme estimation), ainsi que les réinitialisations, les dépenses supplémentaires et les soldes de crédits. Les jauges sont aussi disponibles dans la barre de menus et la fenêtre flottante. Les requêtes suivent le proxy de l’application.
-- Seules les clés de connexion nécessaires sont lues dans SQLite, sans changer de compte, renouveler de jeton, lire les conversations ni copier les identifiants. Les connexions chiffrées, uniquement en mémoire ou liées à un déploiement distinct ne sont pas encore prises en charge. L’API interne peut changer ; un compte Team a été vérifié avec la page d’utilisation officielle ; les autres offres et l’installation sur les trois plateformes restent à valider. Cursor ne propose pas encore de widgets ni de gestion CLI.
+- Seules les clés de connexion nécessaires sont lues dans SQLite, sans changer de compte, renouveler de jeton, lire les conversations ni copier les identifiants. La connexion chiffrée macOS est accessible via le bouton d’autorisation du panneau ou de la page du compte. Seule la clé dérivée reste en mémoire ; elle est effacée à l’arrêt du suivi ou de l’application. Une nouvelle autorisation est nécessaire après redémarrage ; les actualisations en arrière-plan ne lisent pas le trousseau. Le chiffrement Windows/Linux, les formats inconnus, les connexions uniquement en mémoire et les déploiements distincts restent non pris en charge. L’API interne peut changer ; un compte Team a été vérifié avec la page d’utilisation officielle ; les autres offres et l’installation sur les trois plateformes restent à valider. Cursor ne propose pas encore de widgets ni de gestion CLI.
 
 **Affichage et outils CLI**
 
@@ -83,7 +83,7 @@ Les statistiques locales et les fonctions de gestion ci-dessous concernent Codex
 **Cursor**
 
 - Экспериментальный мониторинг текущего входа в настольный Cursor: включается на вкладке Cursor, в настройках отображения или в разделе «Аккаунты провайдеров → Cursor». Как и официальная страница использования, панель раздельно показывает модели Cursor и другие модели с расходами за текущий период и оценкой лимита (расход ÷ процент использования, помечено как оценка), а также время сброса, дополнительные расходы и остатки кредитов. Индикаторы квоты также доступны в строке меню и плавающем окне. Запросы используют прокси приложения.
-- Читаются только необходимые ключи входа из SQLite. Нет переключения аккаунтов, обновления токенов, чтения диалогов или копирования учётных данных. Шифрованные хранилища, вход только в памяти и отдельные развёртывания пока не поддерживаются. Внутренний API может меняться; аккаунт Team сверен с официальной страницей использования; другие тарифы и установка на трёх платформах ещё не проверены. Виджеты и управление CLI для Cursor пока недоступны.
+- Читаются только необходимые ключи входа из SQLite. Нет переключения аккаунтов, обновления токенов, чтения диалогов или копирования учётных данных. Зашифрованный вход macOS доступен через кнопку разрешения чтения на панели или странице аккаунта. Только производный ключ хранится в памяти и удаляется при отключении мониторинга или выходе; после перезапуска требуется новое разрешение. Фоновое обновление не читает Связку ключей. Шифрование Windows/Linux, неизвестные форматы, вход только в памяти и отдельные развёртывания пока не поддерживаются. Внутренний API может меняться; аккаунт Team сверен с официальной страницей использования; другие тарифы и установка на трёх платформах ещё не проверены. Виджеты и управление CLI для Cursor пока недоступны.
 
 **Отображение и инструменты CLI**
 

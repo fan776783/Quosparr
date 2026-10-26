@@ -28,6 +28,7 @@ type CursorState struct {
 	Lines                   []DetailLine
 	UpdatedAt               time.Time
 	Refreshing, Stale       bool
+	NeedsAuthorization      bool
 	LastError               string
 }
 
@@ -57,6 +58,18 @@ func (s *Service) RefreshCursor(force bool) <-chan struct{} {
 		return closedChan()
 	}
 	return s.run(func() { _ = c.Refresh(s.root, force); s.publish() })
+}
+
+// AuthorizeCursor is a foreground action, separate from all refresh paths.
+func (s *Service) AuthorizeCursor() <-chan struct{} {
+	s.mu.Lock()
+	c, ok := s.opts.Cursor.(interface{ Authorize(context.Context) error })
+	wanted := s.prefs.CursorMonitoringEnabled
+	s.mu.Unlock()
+	if !ok || !wanted {
+		return closedChan()
+	}
+	return s.run(func() { _ = c.Authorize(s.root); s.publish() })
 }
 
 func CursorStatusText(l l10n.Localizer, s CursorState) string {

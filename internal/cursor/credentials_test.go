@@ -62,7 +62,7 @@ func TestReadOnlyCredentialsAndUnsupportedModes(t *testing.T) {
 		t.Fatal("official database modified")
 	}
 	put("cursorAuth/accessToken", "cursor-safe-storage:v1:encrypted")
-	if _, err := ReadAuth(context.Background(), dir); !errors.Is(err, ErrUnsupportedLogin) {
+	if _, err := ReadAuth(context.Background(), dir); !errors.Is(err, ErrEncryptedStorage) {
 		t.Fatal("encrypted token accepted")
 	}
 	put("cursorAuth/accessToken", "synthetic-local-token")

@@ -18,6 +18,7 @@ import (
 
 type cursorBridge struct {
 	mu                    sync.Mutex
+	promptMu              sync.Mutex
 	gate                  chan struct{}
 	enabled, refreshing   bool
 	generation            uint64
@@ -30,16 +31,19 @@ type cursorBridge struct {
 	err                   error
 	nextPoll, retryAt     time.Time
 	read                  func(context.Context) (cursor.Auth, error)
+	authorize             func(context.Context) error
+	clearAuth             func()
 	fetch                 func(context.Context, string) (cursor.Snapshot, error)
 	now                   func() time.Time
 }
 
 func newCursorBridge(home string, prefs store.Preferences, langs []string) *cursorBridge {
 	dir := cursor.UserDataDir(runtime.GOOS, home, os.Getenv)
+	reader := cursor.NewAuthReader(dir)
 	return &cursorBridge{
 		gate: make(chan struct{}, 1), enabled: prefs.CursorMonitoringEnabled,
 		lc: l10n.ForPreference(string(prefs.Language), langs), now: time.Now,
-		read:  func(ctx context.Context) (cursor.Auth, error) { return cursor.ReadAuth(ctx, dir) },
+		read: reader.Read, authorize: reader.Authorize, clearAuth: reader.Clear,
 		fetch: (cursor.Client{}).Fetch,
 	}
 }
@@ -66,6 +70,9 @@ func (b *cursorBridge) setPreferences(p store.Preferences, langs []string) {
 	if b.cancel != nil {
 		b.cancel()
 	}
+	if b.clearAuth != nil {
+		b.clearAuth()
+	}
 	b.clearLocked()
 	b.refreshing = false
 }
@@ -77,6 +84,28 @@ func (b *cursorBridge) clearLocked() {
 }
 
 func (b *cursorBridge) Refresh(ctx context.Context, force bool) error {
+	return b.refresh(ctx, force, false)
+}
+
+func (b *cursorBridge) Authorize(ctx context.Context) error {
+	return b.refresh(ctx, true, true)
+}
+
+func (b *cursorBridge) close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.enabled = false
+	b.generation++
+	if b.cancel != nil {
+		b.cancel()
+	}
+	if b.clearAuth != nil {
+		b.clearAuth()
+	}
+	b.clearLocked()
+}
+
+func (b *cursorBridge) refresh(ctx context.Context, force, authorize bool) error {
 	select {
 	case b.gate <- struct{}{}:
 		defer func() { <-b.gate }()
@@ -88,7 +117,11 @@ func (b *cursorBridge) Refresh(ctx context.Context, force bool) error {
 		b.mu.Unlock()
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	timeout := 30 * time.Second
+	if authorize {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	gen := b.generation
 	b.cancel, b.refreshing = cancel, true
 	b.mu.Unlock()
@@ -103,6 +136,16 @@ func (b *cursorBridge) Refresh(ctx context.Context, force bool) error {
 		b.mu.Unlock()
 		b.notify()
 	}()
+	if authorize && b.authorize != nil {
+		if err := b.authorize(ctx); err != nil {
+			viewErr := err
+			if ctx.Err() != nil {
+				viewErr = cursor.ErrAuthorizationRequired
+			}
+			b.authFailure(gen, viewErr)
+			return err
+		}
+	}
 	auth, err := b.read(ctx)
 	if err != nil {
 		b.authFailure(gen, err)
@@ -118,7 +161,14 @@ func (b *cursorBridge) Refresh(ctx context.Context, force bool) error {
 		b.clearLocked()
 	}
 	b.identity, b.email, b.plan = id, auth.Email, auth.Plan
-	if now.Before(b.retryAt) || !force && now.Before(b.nextPoll) {
+	if now.Before(b.retryAt) {
+		if authorize {
+			b.err = &cursor.RateLimitedError{RetryAfter: b.retryAt.Sub(now)}
+		}
+		b.mu.Unlock()
+		return nil
+	}
+	if !force && now.Before(b.nextPoll) {
 		b.mu.Unlock()
 		return nil
 	}
@@ -217,6 +267,7 @@ func (b *cursorBridge) State(now time.Time) runway.CursorState {
 	}
 	if b.err != nil {
 		st.Stale = b.quota != nil
+		st.NeedsAuthorization = errors.Is(b.err, cursor.ErrAuthorizationRequired) || errors.Is(b.err, cursor.ErrAuthorizationDenied) || errors.Is(b.err, cursor.ErrKeychainUnavailable)
 		st.Availability, st.LastError = cursorErrorText(b.lc, b.err)
 	}
 	return st
@@ -225,10 +276,18 @@ func (b *cursorBridge) State(now time.Time) runway.CursorState {
 func cursorErrorText(l l10n.Localizer, err error) (runway.CursorAvailability, string) {
 	var limited *cursor.RateLimitedError
 	switch {
+	case errors.Is(err, cursor.ErrAuthorizationRequired):
+		return runway.CursorReauthRequired, l.CursorAuthorization("required")
+	case errors.Is(err, cursor.ErrAuthorizationDenied):
+		return runway.CursorReauthRequired, l.CursorAuthorization("denied")
+	case errors.Is(err, cursor.ErrKeychainUnavailable):
+		return runway.CursorFailed, l.CursorAuthorization("unavailable")
+	case errors.Is(err, cursor.ErrEncryptedStorage):
+		return runway.CursorFailed, l.CursorAuthorization("unsupported")
 	case errors.Is(err, cursor.ErrNotLoggedIn):
 		return runway.CursorNotLoggedIn, l.Text(l10n.KeyCursorNoLogin)
 	case errors.Is(err, cursor.ErrUnsupportedLogin):
-		return runway.CursorFailed, l.Text(l10n.KeyCursorUnsupportedLogin)
+		return runway.CursorFailed, l.CursorAuthorization("isolated")
 	case errors.Is(err, cursor.ErrUnauthorized):
 		return runway.CursorReauthRequired, l.Text(l10n.KeyCursorReauth)
 	case errors.As(err, &limited):

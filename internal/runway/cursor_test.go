@@ -128,3 +128,31 @@ func TestCursorStatusBarPoolsSurviveGroupingAndWindowSelection(t *testing.T) {
 		t.Fatalf("stale Cursor advertised as live: %+v", v)
 	}
 }
+
+type fakeCursorAuthorization struct {
+	fakeCursor
+	authorized atomic.Int32
+}
+
+func (f *fakeCursorAuthorization) Authorize(context.Context) error { f.authorized.Add(1); return nil }
+
+func TestCursorAuthorizationRequiresOptInAndExplicitAction(t *testing.T) {
+	c := &fakeCursorAuthorization{}
+	s, _ := newService(t, newFake(t), func(o *Options) { o.Cursor = c })
+	<-s.AuthorizeCursor()
+	if c.authorized.Load() != 0 {
+		t.Fatal("disabled Cursor authorized")
+	}
+	p := s.Preferences()
+	p.CursorMonitoringEnabled = true
+	s.SetPreferences(p)
+	settle(t, s)
+	<-s.RefreshCursor(true)
+	if c.authorized.Load() != 0 {
+		t.Fatal("normal refresh initiated authorization")
+	}
+	<-s.AuthorizeCursor()
+	if c.authorized.Load() != 1 {
+		t.Fatal("explicit authorization not delivered")
+	}
+}

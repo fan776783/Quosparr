@@ -246,3 +246,84 @@ func TestCursorTransientReadErrorKeepsRetryAfter(t *testing.T) {
 		t.Fatal("store error reset Retry-After")
 	}
 }
+
+func TestCursorAuthorizationIsSeparateFromRefreshAndDisableCancels(t *testing.T) {
+	b, calls := cursorTestBridge(t)
+	grants := atomic.Int32{}
+	b.read = func(context.Context) (cursor.Auth, error) { return cursor.Auth{}, cursor.ErrAuthorizationRequired }
+	b.authorize = func(context.Context) error { grants.Add(1); return cursor.ErrAuthorizationDenied }
+	if err := b.Refresh(context.Background(), true); !errors.Is(err, cursor.ErrAuthorizationRequired) {
+		t.Fatal(err)
+	}
+	if grants.Load() != 0 || !b.State(b.now()).NeedsAuthorization {
+		t.Fatal("refresh prompted or hid the authorization action")
+	}
+	if err := b.Authorize(context.Background()); !errors.Is(err, cursor.ErrAuthorizationDenied) {
+		t.Fatal(err)
+	}
+	if grants.Load() != 1 || calls.Load() != 0 || !b.State(b.now()).NeedsAuthorization {
+		t.Fatal("denial reached API or lost retry action")
+	}
+	cleared := atomic.Int32{}
+	b.clearAuth = func() { cleared.Add(1) }
+	started := make(chan struct{})
+	b.authorize = func(ctx context.Context) error { close(started); <-ctx.Done(); return ctx.Err() }
+	done := make(chan error, 1)
+	go func() { done <- b.Authorize(context.Background()) }()
+	<-started
+	b.setPreferences(store.DefaultPreferences(), nil)
+	<-done
+	if cleared.Load() != 1 || b.State(b.now()).Availability != runway.CursorDisabled || calls.Load() != 0 {
+		t.Fatal("disabled authorization retained data or reached API")
+	}
+	b.close()
+	if cleared.Load() != 2 {
+		t.Fatal("shutdown did not clear key")
+	}
+}
+
+func TestCursorCancelledAuthorizationKeepsRetryAction(t *testing.T) {
+	b, _ := cursorTestBridge(t)
+	b.authorize = func(ctx context.Context) error { return ctx.Err() }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := b.Authorize(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if st := b.State(b.now()); !st.NeedsAuthorization || st.Refreshing {
+		t.Fatal("cancelled authorization lost retry action")
+	}
+}
+
+func TestCursorAuthorizationSuccessKeepsServerRetryAfter(t *testing.T) {
+	b, calls := cursorTestBridge(t)
+	read := b.read
+	authorized := false
+	b.read = func(ctx context.Context) (cursor.Auth, error) {
+		if !authorized {
+			return cursor.Auth{}, cursor.ErrAuthorizationRequired
+		}
+		return read(ctx)
+	}
+	grants := 0
+	b.authorize = func(context.Context) error { grants++; authorized = true; return nil }
+	_ = b.Refresh(context.Background(), true)
+	if err := b.Authorize(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if st := b.State(b.now()); st.NeedsAuthorization || st.Availability != runway.CursorReady || calls.Load() != 1 || grants != 1 {
+		t.Fatal("successful authorization did not publish quota")
+	}
+	b.retryAt = b.now().Add(time.Minute)
+	authorized = false
+	_ = b.Refresh(context.Background(), true)
+	if err := b.Authorize(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 {
+		t.Fatal("authorization bypassed Retry-After")
+	}
+	if st := b.State(b.now()); st.NeedsAuthorization || st.LastError != b.lc.Text(l10n.KeyCursorRateLimited) {
+		t.Fatal("successful authorization still requests authorization during rate limit")
+	}
+}

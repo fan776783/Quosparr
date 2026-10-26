@@ -42,7 +42,7 @@ func renderAccountsPage(c *ui.Context, u *settingsUI) {
 	case accountKindGrok:
 		renderGrokAccounts(c, u, f, rt)
 	case accountKindCursor:
-		renderCursorAccount(c, u, rt.svc.Snapshot().Cursor, func() { rt.svc.RefreshCursor(true) })
+		renderCursorAccount(c, u, rt.svc.Snapshot().Cursor, func() { rt.svc.RefreshCursor(true) }, func() { rt.requestCursorAuthorization(l) })
 	default:
 		renderClaudeAccounts(c, u, f, rt)
 	}

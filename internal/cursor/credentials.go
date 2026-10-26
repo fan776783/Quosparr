@@ -16,12 +16,16 @@ import (
 )
 
 var (
-	ErrNotLoggedIn      = errors.New("cursor: no readable desktop login")
-	ErrCredentials      = errors.New("cursor: credential store unavailable")
-	ErrUnsupportedLogin = errors.New("cursor: unsupported desktop login storage or deployment")
-	ErrUnauthorized     = errors.New("cursor: authentication expired")
-	ErrResponse         = errors.New("cursor: unsupported usage response")
-	ErrUnavailable      = errors.New("cursor: usage unavailable")
+	ErrNotLoggedIn           = errors.New("cursor: no readable desktop login")
+	ErrCredentials           = errors.New("cursor: credential store unavailable")
+	ErrUnsupportedLogin      = errors.New("cursor: unsupported isolated deployment")
+	ErrEncryptedStorage      = errors.New("cursor: unsupported encrypted storage")
+	ErrAuthorizationRequired = errors.New("cursor: keychain authorization required")
+	ErrAuthorizationDenied   = errors.New("cursor: keychain authorization denied")
+	ErrKeychainUnavailable   = errors.New("cursor: keychain unavailable")
+	ErrUnauthorized          = errors.New("cursor: authentication expired")
+	ErrResponse              = errors.New("cursor: unsupported usage response")
+	ErrUnavailable           = errors.New("cursor: usage unavailable")
 )
 
 // Auth is transient; it must never be serialized, cached or logged.
@@ -73,9 +77,16 @@ func UserDataDir(goos, home string, getenv func(string) string) string {
 }
 
 // ReadAuth only selects the required keys. SQLite remains read-only and observes WAL.
-// Missing databases are never created; encrypted tokens and isolated deployments
-// cannot be sent to the production service by this integration.
+// Missing databases are never created. This stateless entry point rejects
+// encryption; AuthReader provides explicitly authorized, in-memory decryption.
 func ReadAuth(ctx context.Context, userDataDir string) (Auth, error) {
+	return readAuth(ctx, userDataDir, nil)
+}
+
+func readAuth(ctx context.Context, userDataDir string, unseal func(string) (string, error)) (Auth, error) {
+	if err := ctx.Err(); err != nil {
+		return Auth{}, err
+	}
 	path := filepath.Join(userDataDir, "User", "globalStorage", "state.vscdb")
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -123,7 +134,13 @@ func ReadAuth(ctx context.Context, userDataDir string) (Auth, error) {
 		return Auth{}, ErrNotLoggedIn
 	}
 	if strings.HasPrefix(a.Token, "cursor-safe-storage:") {
-		return Auth{}, ErrUnsupportedLogin
+		if unseal == nil {
+			return Auth{}, ErrEncryptedStorage
+		}
+		a.Token, err = unseal(a.Token)
+		if err != nil {
+			return Auth{}, err
+		}
 	}
 	if !validToken(a.Token) {
 		return Auth{}, ErrCredentials
