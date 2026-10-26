@@ -52,34 +52,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/Licoy/Quosparr.git
           git fetch --no-tags upstream main
-          if git merge-base --is-ancestor upstream/main HEAD; then
-            echo "Already up to date with upstream"
-          else
-            git show HEAD:mygo.json > "$RUNNER_TEMP/fork-mygo.json"
-            git show upstream/main:mygo.json > "$RUNNER_TEMP/upstream-mygo.json"
-            if ! git merge --no-edit upstream/main; then
-              conflicts="$(git diff --name-only --diff-filter=U)"
-              if [[ "$conflicts" != mygo.json ]]; then
-                git merge --abort
-                {
-                  echo "### Upstream merge conflicts"
-                  echo
-                  printf -- '- `%s`\n' $conflicts
-                  echo
-                  echo "Merge upstream locally as described in docs/fork.md."
-                } >> "$GITHUB_STEP_SUMMARY"
-                echo "::error::Upstream merge conflicts: $(echo $conflicts)"
-                exit 1
-              fi
-              git checkout --theirs mygo.json
-            fi
-            version="$(python3 Scripts/fork-sync-config.py "$RUNNER_TEMP/fork-mygo.json" "$RUNNER_TEMP/upstream-mygo.json")"
-            git add mygo.json
-            if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
-              git commit --no-edit
-            elif ! git diff --cached --quiet; then
-              git commit -m "chore(fork): 同步上游版本号为 $version"
-            fi
+          bash Scripts/fork-merge.sh upstream/main
+          version="$(python3 -c 'import json; print(json.load(open("mygo.json"))["version"])')"
+          # Detect workflow-token limitations before the expensive build checks.
+          if ! git diff --quiet origin/main HEAD -- .github/workflows; then
+            echo "Upstream changed workflow files; sync locally with workflow-capable credentials (docs/fork.md)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
           changed=false
           [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || changed=true

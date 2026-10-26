@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/licoy/quosparr/internal/alerts"
 	"github.com/licoy/quosparr/internal/claude"
+	"github.com/licoy/quosparr/internal/claudedesktop"
 	"github.com/licoy/quosparr/internal/codex"
 	"github.com/licoy/quosparr/internal/codexapi"
 	"github.com/licoy/quosparr/internal/estimate"
@@ -24,6 +25,7 @@ import (
 	"github.com/licoy/quosparr/internal/l10n"
 	"github.com/licoy/quosparr/internal/netx"
 	"github.com/licoy/quosparr/internal/platform"
+	"github.com/licoy/quosparr/internal/pricing"
 	"github.com/licoy/quosparr/internal/resettoday"
 	"github.com/licoy/quosparr/internal/resettoday/runwayfmt"
 	"github.com/licoy/quosparr/internal/runway"
@@ -35,11 +37,13 @@ import (
 
 // BackgroundOptions is what StartBackground needs from main.
 type BackgroundOptions struct {
-	Home     string
-	Settings *Settings
-	Notifier *Notifier
-	Version  string
-	Host     *App
+	Home         string
+	Settings     *Settings
+	Notifier     *Notifier
+	Version      string
+	Host         *App
+	PricingFetch pricing.Fetcher
+	PricingNow   func() time.Time
 }
 
 // StartBackground builds one coordinator and starts it. The returned func
@@ -55,6 +59,7 @@ func StartBackground(ctx context.Context, opts BackgroundOptions) func() {
 		opts.Host.SetPanelActions(rt.panelActions(opts.Settings))
 	}
 	rt.svc.Start(ctx)
+	rt.pricing.start(ctx)
 	rt.widgets.refresh()
 	return func() {
 		if unsubscribe != nil {
@@ -164,12 +169,15 @@ func netCredentials(c *ProxyCredentials) *netx.Credentials {
 func OpenFolder(path string) { openFolder(path) }
 
 type liveApp struct {
+	pricing        *livePricing
+	host           *App
 	preferenceWork livePreferenceWork
 	svc            *runway.Service
 	codex          *codex.Store
 	grokMod        *grok.Module
 	grok           *grokBridge
 	claudeMod      *claude.Module
+	claudeDesktop  *claudedesktop.Manager
 	claudeB        *claudeBridge
 	cursorB        *cursorBridge
 	codexCache     usage.CacheScanCache
@@ -208,6 +216,8 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 	if opts.Settings != nil {
 		prefs = opts.Settings.Prefs()
 	}
+	prices := newLivePricing(home, prefs, opts.PricingFetch, opts.PricingNow)
+	priceSource := usage.SnapshotPrices(prices.manager.Snapshot)
 	codexStore := codex.NewStore(platform.CodexDir(home), platform.RunwayDir(home))
 	// NewStore is the constructor; grok has no Open.
 	gstore := grok.NewStore(grok.ResolveOfficialHome(os.Getenv("GROK_HOME"), home), platform.RunwayDir(home))
@@ -230,7 +240,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 	cbridge.reload(false)
 	cursorB := newCursorBridge(home, prefs, langs)
 	reset := newResetBridge(opts.Settings, prefs, langs)
-	repo := openUsage(home)
+	repo := openUsage(home, priceSource)
 	widgetRequirements := initialWidgetRequirements(opts.Settings)
 	widgets := newWidgetCoordinator(home, widgetRequirements != 0)
 	var svc *runway.Service
@@ -252,9 +262,10 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		}
 	}}
 	svc = runway.New(runway.Options{
+		PricingVersion: func() string { return priceSource.PriceBook(context.Background()).Version() },
 		Sources: runway.NewLiveSources(runway.LiveConfig{
 			Store: codexStore, CodexHome: platform.CodexDir(home),
-			Quota: codexapi.QuotaClient{}, Refresher: codexapi.TokenRefresher{}, Repo: repo,
+			Quota: codexapi.QuotaClient{}, Refresher: codexapi.TokenRefresher{}, Repo: repo, Prices: priceSource,
 		}),
 		Preferences:         prefs,
 		AlertsPath:          alerts.DefaultPath(home),
@@ -277,8 +288,23 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		SystemLanguages: langs,
 	})
 	rt := &liveApp{
-		svc: svc, codex: codexStore, grokMod: mod, grok: bridge, claudeMod: cmod, claudeB: cbridge, cursorB: cursorB, reset: reset,
+		host: opts.Host, pricing: prices, svc: svc, codex: codexStore, grokMod: mod, grok: bridge, claudeMod: cmod, claudeB: cbridge, reset: reset,
 		repo: repo, widgets: widgets, dispatch: dispatch, widgetDispatch: widgetUI, alertDispatch: alertUI, version: opts.Version, langs: langs,
+	}
+	rt.cursorB = cursorB
+	rt.claudeDesktop = newClaudeDesktopManager(home, cmod)
+	bridge.pricingSnapshot = prices.manager.Snapshot
+	cbridge.pricingSnapshot = prices.manager.Snapshot
+	prices.changed = rt.pricesChanged
+	prices.invalidate = func() {
+		runOnMain(func() {
+			if opts.Host != nil {
+				opts.Host.redrawPanel()
+				if opts.Host.setWin != nil {
+					opts.Host.setWin.Invalidate()
+				}
+			}
+		})
 	}
 	widgets.onRequirements = svc.SetWidgetRequirements
 	widgets.onError = svc.ReportWidgetError
@@ -302,6 +328,9 @@ func (rt *liveApp) stop() {
 	if rt.widgets != nil {
 		rt.widgets.close()
 	}
+	if rt.pricing != nil {
+		rt.pricing.close()
+	}
 	rt.closePreferences()
 	rt.svc.Close()
 	if rt.repo != nil {
@@ -317,6 +346,7 @@ func (rt *liveApp) pushPreferences(s *Settings) {
 func (rt *liveApp) panelActions(s *Settings) PanelActions {
 	svc := rt.svc
 	actions := PanelActions{
+		PricingVersion: rt.pricingVersion,
 		Refresh:        func() { rt.requestRefresh(s, "") },
 		RefreshSection: func(sec runway.Section) { rt.requestRefresh(s, sec) },
 		SetCursorMonitoring: func(on bool) {
@@ -420,12 +450,17 @@ func refreshSection(s *runway.Service, sec runway.Section) {
 	}
 }
 
-func openUsage(home string) *usage.Repository {
+func openUsage(home string, sources ...usage.PriceSource) *usage.Repository {
+	var prices usage.PriceSource
+	if len(sources) > 0 {
+		prices = sources[0]
+	}
 	if err := sqliteruntime.Load(); err != nil {
 		log.Println("usage index:", err)
 		return nil
 	}
 	repo, err := usage.NewRepository(usage.Config{
+		Prices:       prices,
 		CodexHome:    platform.CodexDir(home),
 		DatabasePath: usage.DefaultDatabasePath(home),
 	})
@@ -650,21 +685,23 @@ func alertWhen(a alerts.Alert) string {
 }
 
 type grokBridge struct {
-	mod        *grok.Module
-	mu         sync.Mutex
-	onChange   func()
-	state      runway.GrokState
-	refreshes  int
-	lc         l10n.Localizer
-	prefs      store.Preferences
-	local      *grok.SessionUsageSummary
-	localRange store.CostRange
-	localErr   error
-	speed      *speed.Report
-	speedErr   error
-	generation uint64
-	refreshMu  sync.Mutex
-	scanMu     sync.Mutex
+	pricingSnapshot   func() pricing.Snapshot
+	pricingGeneration uint64
+	mod               *grok.Module
+	mu                sync.Mutex
+	onChange          func()
+	state             runway.GrokState
+	refreshes         int
+	lc                l10n.Localizer
+	prefs             store.Preferences
+	local             *grok.SessionUsageSummary
+	localRange        store.CostRange
+	localErr          error
+	speed             *speed.Report
+	speedErr          error
+	generation        uint64
+	refreshMu         sync.Mutex
+	scanMu            sync.Mutex
 }
 
 func newGrokBridge(mod *grok.Module, prefs store.Preferences, langs []string) *grokBridge {
@@ -977,6 +1014,7 @@ func grokWidget(st runway.GrokState) *export.ProviderSnapshot {
 		d, err := swiftjson.ParseDecimal(st.Cost.EstimatedUSD.String())
 		if err == nil {
 			p.APIEquivalentCostUSD = &d
+			p.APIEquivalentCostPartial = st.Cost.UnpricedTokens > 0 || st.Cost.Confidence == usage.ConfidencePartiallyPriced
 		}
 	}
 	if st.ResetCreditSummary != nil {

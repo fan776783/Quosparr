@@ -30,9 +30,12 @@ Quosparr 是適用於 macOS、Windows、Linux 的原生選單列 / 系統匣應�
 
 - 查看 Claude Code 訂閱用量的 5 小時視窗、7 天視窗、按模型的週額度與額外用量。這個讀數不是公開的計費介面。
 - 從 Claude Code 本機工作階段日誌統計 token 用量、API 等價成本（`anthropic-builtin-2026-10-14`）、最近工作階段與輸出速率。同一則回覆只計一次。未知模型不給精確費用。日誌沒有首 token 時間，該欄顯示「—」，速率按端到端耗時計算。
-- 訂閱帳號可匯入目前登入、貼上憑證或從檔案匯入，然後切換。應用內登入會提示先在終端機執行 `claude auth login`，再匯入。Quosparr 不重新整理目前帳號；登入過期時執行一次 `claude`。其他託管帳號只把重新整理結果寫入帳號庫複本。
+- 訂閱帳號可直接透過瀏覽器登入，無須先執行 CLI，也可匯入目前登入、貼上憑證或從檔案匯入；瀏覽器登入支援取消和貼上回呼，僅加入帳號庫，需明確切換才在 Claude Code 中使用；Quosparr 不重新整理目前帳號，登入過期時執行一次 `claude`；其他託管帳號只把重新整理結果寫入帳號庫複本
 - macOS 上官方憑證留在鑰匙圈，經 `/usr/bin/security` 讀寫。Windows 與 Linux 使用 `<config>/.credentials.json`。切換只替換 `claudeAiOauth`，保留 MCP 權杖，並只更新 `.claude.json` 裡的 `oauthAccount`。正在執行的 Claude Code 不會被結束，可能寫回舊登入，切換前會提示。
 - API 帳號：Base URL + API Key，可從站點取得模型清單並分別映射 Opus / Sonnet / Haiku / Fable 模型。切換時只把 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` 與模型映射寫入 `settings.json`（寫入前備份），訂閱登入保持不變；切回訂閱帳號時移除這些鍵。中轉站餘額顯示在所有呈現 Claude 額度的位置。已寫在 `settings.json` 中的中轉設定會自動匯入。編輯目前帳號時可替換 Key（留空保留），並選擇是否立即改寫 `settings.json`，改寫後需重新啟動 Claude Code
+
+- **Claude Desktop 訂閱帳號**：兩個帳號清單皆可綁定，首次須在 Desktop 手動登入所示帳號及組織後回到 Quosparr 明確確認；每次操作皆須先儲存工作並同意結束 Desktop，儲存或還原完整本機設定，包括登入、設定及本機狀態；完成或取消綁定皆還原先前的設定；連動切換預設關閉，目前 CLI 帳號也能單獨開啟已綁定 Desktop；CLI 與 Desktop 結果分別回報，啟動成功不代表已驗證帳號
+- Desktop 設定檔及其本機原生加密登入資料私有保存在 `~/.quosparr/claude-desktop`，Windows 使用僅目前使用者可存取的 protected ACL，保留官方資料路徑，Quosparr 不解密且不納入帳號匯出；原設定單獨保留，不匯入其中帳號，不讀取瀏覽器或其他應用程式資料；設定檔與 Desktop 資料須在同一磁碟區，中斷後可主動還原；不支援 API 帳號，macOS、Windows、Linux 真機與 Desktop 版本相容驗收仍待完成
 
 **Grok**
 
@@ -40,16 +43,13 @@ Quosparr 是適用於 macOS、Windows、Linux 的原生選單列 / 系統匣應�
 - 多個 OAuth / SuperGrok 帳號：隔離登入、匯入目前登入、貼上憑證、重新整理、別名、排序與明確切換帳號。
 - 查看本機 Grok CLI 日誌中的最近工作階段。
 
-**Cursor**
+**三個供應商通用**
 
-- 實驗性監控 Cursor 桌面目前登入：在 Cursor 頁籤、顯示設定或「服務商帳號 → Cursor」中主動啟用。面板依官方用量頁分開顯示 Cursor 模型與其他模型的用量，附本帳期已花金額與估算總額（已花 ÷ 已用百分比，標註「估算」），以及重置時間、額外支出與 Credit 餘額，額度條也可用於選單列和懸浮視窗；請求遵循應用程式代理設定。
-- 唯讀桌面 SQLite 中必要的登入欄位，不切換帳號、不更新 token、不掃描對話、不複製憑證。加密、僅記憶體與獨立部署的登入暫不支援。內部介面可能變更，已用 Team 帳號對照官方用量頁驗證，其他方案與三平台安裝驗收仍待完成；Cursor 暫不接入 Widget 或 CLI 管理。
-
-**顯示與 CLI 管理**
-
-以下本機統計與管理功能適用於 Codex、Claude 和 Grok；Cursor 目前僅提供額度監控。
-
-- 常駐的 `Codex | Claude | Grok | Cursor` 頁籤。macOS 設定中的「狀態欄元件」可預覽額度條、倒計時、電池（橫向或直向）、圓環進度（數值可置於環內）、進度文本五種樣式；選單列可跟隨主面板，或分別顯示四個供應商中的任意幾個，額度條、倒計時與電池還可將兩個供應商上下疊放在同一元件中。已經儲存的「Codex + Grok」仍是這一對。
+- 設定中的「模型價格」位於「進階」之前並與其同組；預設每小時自動同步 models.dev 公開目錄，可關閉，可選預設或自訂 15 分鐘至 7 天頻率，修改立即儲存，關閉自動同步後仍可手動同步
+- 模型價格列出美元 / 百萬 Token 的參考費率，不代表圖像、影片等全部模態費用；目錄參考價與實際採用價可能因已核實的上下文階梯、快取寫入時長、Fast 或地區計費規則不同，詳情顯示來源與版本，以下帶日期的內建表保留為離線基線；僅依固定 Codex / Claude / Grok tabs 顯示 OpenAI、Anthropic、xAI 三家原始供應商條目與對應內建價格，預設 Codex，不提供其他廠商入口，不顯示第三方代理或其他供應商的同名模型，models.dev 是彙整公開目錄而非供應商官方即時介面；tabs 右側「頻率設定」按鈕開啟原生彈窗，自動同步、頻率與詳細狀態共同適用於三家，修改立即儲存，關閉彈窗不取消同步工作
+- API 等價成本依目前價格重新估算歷史本機用量；總額、每日、專案、模型與工作階段的部分成本均有標記，並完整列出缺少的費率或規則；缺價顯示 —，明確免費顯示 $0，訂閱額度與 reset credits 維持原有口徑
+- 價格同步僅經已儲存的代理策略下載公開目錄，不上傳工作階段日誌；離線保留內建價格與最後成功儲存的目錄，同步失敗會明確顯示
+- 常駐的 `Codex | Claude | Grok` 頁籤。macOS 設定中的「狀態欄元件」可預覽額度條、倒計時、電池（橫向或直向）、圓環進度（數值可置於環內）、進度文本五種樣式；選單列可跟隨主面板，或分別顯示三個供應商中的任意幾個，額度條、倒計時與電池還可將兩個供應商上下疊放在同一元件中。已經儲存的「Codex + Grok」仍是這一對。
 - 可選的置頂桌面懸浮窗，最多顯示三個供應商的剩餘額度，提供膠囊、卡片、圓環、電池四種樣式；按一下開啟主面板，拖曳可移動，按右鍵查看更多選項，可調整不透明度、鎖定位置，並選擇是否顯示在全螢幕應用程式上方。
 - 查看今天、本週期、上週期、本月或自訂範圍的 API 等價成本與 token 用量。
 - 年度 token 用量圖表，支援熱力圖、折線圖和長條圖（每日 / 每週 / 累計）。
@@ -124,7 +124,7 @@ Linux 需要 GTK3、AppIndicator、支援系統匣的桌面環境，以及可用
 
 - 建議本機已安裝並使用 Codex。Codex 資料來自 `CODEX_HOME`，預設為 `~/.codex`，Windows 上預設為 `%USERPROFILE%\.codex`。
 - 僅支援 `file` 憑證儲存方式（Codex `config.toml` 中未設定 `cli_auth_credentials_store` 時即為此方式）。`keyring`、`auto`、`ephemeral` 會顯示不支援，並阻止匯入與切換帳號。
-- Claude 面板使用官方 Claude Code CLI。若已設定 `CLAUDE_CONFIG_DIR` 則使用該目錄，否則使用 `~/.claude`。訂閱用量需要 Claude.ai 登入。API Key 或閘道不提供這份用量。執行 `claude auth login` 後目前登入會自動加入，之後以其他帳號登入也會自動加入；也可以貼上憑證 JSON 或從檔案匯入。
+- Claude 面板從 `CLAUDE_CONFIG_DIR`（未設定時為 `~/.claude`）讀取 Claude Code 設定，訂閱用量需要 Claude.ai 登入，API Key 或閘道不提供這份用量；瀏覽器登入無須安裝或先執行 CLI，在你明確切換前只寫帳號庫；已有 CLI 登入會自動加入，也可貼上憑證 JSON 或從檔案匯入；真實瀏覽器授權和切換仍需隔離帳號驗收
 - 使用 Grok 面板前需要安裝[官方 Grok CLI](https://docs.x.ai/build/overview)：
 
   ```bash
@@ -148,7 +148,7 @@ Linux 需要 GTK3、AppIndicator、支援系統匣的桌面環境，以及可用
 ## 隱私
 
 - Quosparr 的自有資料存放在 `~/.quosparr`，不會在 `~/.codex` 中寫入應用程式快取。預設只儲存非機密的衍生資料。
-- 服務商帳號憑證是唯一的例外，儲存在 `~/.quosparr/accounts/<id>/auth.json`（目錄 `0700`、檔案 `0600`，以原子方式寫入；Windows 使用僅限目前使用者存取的 ACL）。帳號索引不含 token。
+- 服務商帳號憑證與上文明確確認的 Desktop 設定檔為受控例外，帳號憑證儲存在 `~/.quosparr/accounts/<id>/auth.json`（目錄 `0700`、檔案 `0600`，以原子方式寫入；Windows 使用僅限目前使用者存取的 ACL）。帳號索引不含 token。
 - 官方 `~/.codex/auth.json` 只會在 OAuth 重新整理回寫，或你確認切換帳號時寫入。重新整理非目前帳號只會更新帳號庫中的副本。
 - Claude 憑證在 macOS 上經 `/usr/bin/security` 讀取鑰匙圈，在 Windows 與 Linux 上讀取 `<config>/.credentials.json`。託管副本位於 `~/.quosparr/accounts/claude-<stable-id>/auth.json`，只含 `claudeAiOauth`。索引 `claude-index.json` 不含 token。切換保留 MCP 權杖，並只替換 `.claude.json` 的 `oauthAccount`。Quosparr 不重新整理目前帳號。
 - API 帳號的 Key 只保存在託管副本（`~/.quosparr/accounts/<id>/auth.json` 或 `claude-api-<id>/auth.json`），索引只保存 Base URL、模型與餘額快取。餘額與模型請求只發往你填寫的站點，並遵循代理設定。被修改的 `config.toml` 與 `settings.json` 會先備份到 `~/.quosparr/backups`；首次寫入 `settings.json` 時會依鍵名重新排序
@@ -163,8 +163,8 @@ Linux 需要 GTK3、AppIndicator、支援系統匣的桌面環境，以及可用
 
 - **Codex 額度 / reset credits / 官方用量**：使用本機憑證請求 ChatGPT / Codex 官方後端介面。官方用量屬於目前帳號，可能延遲或被修訂。
 - **週額度推算**：非官方，依週用量百分比與每日 Credits 外推（1000 Credits ≈ $40，版本 `credits-usd-2026-08-26`）。`quota-estimate-history.json` 只儲存衍生的 Credits 與占用率。
-- **Codex API 等價成本**：依本機工作階段日誌，使用內建價格表 `openai-builtin-2026-09-27` 計算；線上官方價格表採用 `openai-docs-` 版本。未知模型不會回報精確費用。
-- **Claude Code 訂閱用量**：來自未公開的 OAuth usage 端點，只表示目前的 Claude Code 訂閱，不寫成官方計費介面。不讀取瀏覽器 Cookie、Claude Desktop 資料或 Console API 帳單。
+- **Codex API 等價成本**：依本機工作階段日誌，使用內建價格表 `openai-builtin-2026-09-27` 計算；支援的目前費率來自 models.dev，並保留已核實的內建規則。未知模型不會回報精確費用。
+- **Claude Code 訂閱用量**：來自未公開的 OAuth usage 端點，只表示目前的 Claude Code 訂閱，不寫成官方計費介面。不讀取瀏覽器 Cookie 或 Console API 帳單，Desktop 設定檔僅由上述獨立且明確確認的功能管理。
 - **Claude API 等價成本**：依 Claude Code 本機工作階段日誌與價格表 `anthropic-builtin-2026-10-14` 計算。同一則回覆按訊息 ID 只計一次。快取寫入分為 5 分鐘與 1 小時，Fast 檔單獨計價。未知模型不報告精確費用。按日統計使用本地時區。
 - **Grok 額度**：僅使用官方 CLI chat-proxy 的 `/v1/billing?format=credits` 端點。不讀取瀏覽器 Cookie，不從本機日誌推算額度，也不混入 API 帳單。
 - **Grok API 等價成本**：依本機 `turn_completed` 用量與價格表 `xai-builtin-2026-09-27` 計算，區分輸入、快取、輸出及長上下文費率。`costUsdTicks` 屬於訂閱額度記帳，不作為 API 等價成本。

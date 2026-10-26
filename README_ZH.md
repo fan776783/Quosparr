@@ -30,9 +30,12 @@ Quosparr 是面向 macOS、Windows、Linux 的原生菜单栏 / 系统托盘应�
 
 - 查看 Claude Code 订阅用量的 5 小时窗口、7 天窗口、按模型的周额度和额外用量。这个读数不是公开的计费接口
 - 从 Claude Code 本机会话日志统计 Token 用量、API 等价成本（`anthropic-builtin-2026-10-14`）、最近会话和输出速率。同一条回复只计一次。未知模型不给精确费用。日志没有首 token 时间，该列显示“—”，速率按端到端耗时计算
-- 订阅账号可导入当前登录、粘贴凭据或从文件导入，然后切号。应用内登录会提示先在终端执行 `claude auth login`，再导入。Quosparr 不刷新当前账号；登录过期时运行一次 `claude`。其他托管账号只把刷新结果写入账号库副本
+- 订阅账号可直接通过浏览器登录，无需先运行 CLI，也可导入当前登录、粘贴凭据或从文件导入；浏览器登录支持取消和粘贴回调，仅加入账号库，需显式切换才在 Claude Code 中使用；Quosparr 不刷新当前账号，登录过期时运行一次 `claude`；其他托管账号只把刷新结果写入账号库副本
 - macOS 上官方凭据留在钥匙串，经 `/usr/bin/security` 读写。Windows 与 Linux 使用 `<config>/.credentials.json`。切号只替换 `claudeAiOauth`，保留 MCP 令牌，并只更新 `.claude.json` 里的 `oauthAccount`。正在运行的 Claude Code 不会被结束，可能写回旧登录，切换前会提示
 - API 账号：Base URL + API Key，可从站点获取模型列表并分别映射 Opus / Sonnet / Haiku / Fable 模型。切换时只把 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` 与模型映射写入 `settings.json`（写入前备份），订阅登录保持不变；切回订阅账号时移除这些键。中转站余额显示在所有展示 Claude 额度的位置。已写在 `settings.json` 中的中转配置会自动导入。编辑当前账号时可替换 Key（留空保留），并选择是否立即改写 `settings.json`，改写后需重启 Claude Code
+
+- **Claude Desktop 订阅账号**：两个账号列表均可绑定，首次须在 Desktop 手动登录所示账号及组织后回到 Quosparr 明确确认；每次操作均须先保存任务并同意退出 Desktop，保存或恢复其完整本地配置，包括登录、设置及本地状态；完成或取消绑定均恢复之前的配置；联动切号默认关闭，当前 CLI 账号也能单独打开已绑定 Desktop；CLI 与 Desktop 结果分别报告，启动成功不代表已验证账号
+- Desktop 配置档及其本机原生加密登录数据私有保存在 `~/.quosparr/claude-desktop`，Windows 使用仅当前用户可访问的 protected ACL，保留官方数据路径，Quosparr 不解密且不纳入账号导出；原配置单独保留，不导入其中账号，不读取浏览器或其他应用数据；配置档与 Desktop 数据须在同一卷，中断后可主动恢复；不支持 API 账号，macOS、Windows、Linux 真机与 Desktop 版本兼容验收仍待完成
 
 **Grok**
 
@@ -40,16 +43,13 @@ Quosparr 是面向 macOS、Windows、Linux 的原生菜单栏 / 系统托盘应�
 - 多个 OAuth / SuperGrok 账号：隔离登录、导入当前登录、粘贴凭据、刷新、别名、排序与显式切号
 - 查看本地 Grok CLI 日志中的最近会话
 
-**Cursor**
+**三个供应商通用**
 
-- 实验性监控 Cursor 桌面当前登录：在 Cursor 栏位、显示设置或“服务商账号 → Cursor”中主动启用。面板按官方用量页分开展示 Cursor 模型与其他模型的用量，附本账期已花金额与估算总额（已花 ÷ 已用百分比，标注“估算”），以及重置时间、额外支出与 Credit 余额，额度条也可用于菜单栏和悬浮窗；请求遵循应用代理设置。
-- 只读取桌面 SQLite 中必要的登录字段，不切换账号、不刷新 token、不扫描对话、不复制凭据。加密、仅内存与独立部署的登录暂不支持。内部接口可能变化，已用 Team 账号对照官方用量页验证，其他套餐与三端安装验收仍待完成；Cursor 暂不接入 Widget 或 CLI 管理。
-
-**显示与 CLI 管理**
-
-以下本地统计与管理功能适用于 Codex、Claude 和 Grok；Cursor 当前仅提供额度监控。
-
-- 常驻 `Codex | Claude | Grok | Cursor` 标签切换。macOS 设置中的“状态栏组件”可预览额度条、倒计时、电池（横向或竖向）、圆环进度（数值可置于环内）、进度文本五种样式；菜单栏可跟随主面板，或分别显示四个供应商中的任意几个，额度条、倒计时与电池还可将两个供应商上下叠放在同一组件中。已经保存的 “Codex + Grok” 仍是这一对
+- 设置中的“模型价格”位于“高级”之前并与其同组；默认每小时自动同步 models.dev 公开目录，可关闭，可选预设或自定义 15 分钟至 7 天频率，修改立即保存，关闭自动同步后仍可手动同步
+- 模型价格列出美元 / 百万 Token 的参考费率，不代表图像、视频等全部模态费用；目录参考价与实际采用价可能因已核实的上下文阶梯、缓存写入时长、Fast 或地区计费规则不同，详情显示来源与版本，以下带日期的内置表保留为离线基线；仅按固定 Codex / Claude / Grok tabs 展示 OpenAI、Anthropic、xAI 三家原始服务商条目与对应内置价格，默认 Codex，不提供其他厂商入口，不展示第三方代理或其他服务商的同名模型，models.dev 是聚合公开目录而非供应商官方实时接口；tabs 右侧“频率设置”按钮打开原生弹窗，自动同步、频率与详细状态共同适用于三家，修改立即保存，关闭弹窗不取消同步任务
+- API 等价成本按当前价格重新估算历史本机用量；总额、每日、项目、模型与会话的部分成本均有标记，并完整列出缺少的费率或规则；缺价显示 —，明确免费显示 $0，订阅额度与 reset credits 维持原有口径
+- 价格同步仅经已保存的代理策略下载公开目录，不上传会话日志；离线保留内置价格与最后成功保存的目录，同步失败会明确显示
+- 常驻 `Codex | Claude | Grok` 标签切换。macOS 设置中的“状态栏组件”可预览额度条、倒计时、电池（横向或竖向）、圆环进度（数值可置于环内）、进度文本五种样式；菜单栏可跟随主面板，或分别显示三个供应商中的任意几个，额度条、倒计时与电池还可将两个供应商上下叠放在同一组件中。已经保存的 “Codex + Grok” 仍是这一对
 - 可选的置顶桌面悬浮窗，最多显示三个供应商的剩余额度，提供胶囊、卡片、圆环、电池四种样式；单击打开主面板，拖动可移动，右键查看更多选项，可调不透明度、锁定位置，并选择是否显示在全屏应用上方
 - 查看今天、本周期、上周期、本月或自定义范围的 API 等价成本与 Token 用量
 - 年度 Token 用量图表，支持热力图、折线图和柱状图（按日 / 按周 / 累计）
@@ -124,7 +124,7 @@ Linux 需要 GTK3、AppIndicator、支持托盘的桌面，以及可用的 Secre
 
 - 建议本机已安装并使用 Codex。Codex 数据来自 `CODEX_HOME`，默认 `~/.codex`，Windows 默认 `%USERPROFILE%\.codex`
 - 仅支持 `file` 凭据存储（Codex `config.toml` 中未设置 `cli_auth_credentials_store` 时即为该方式）；`keyring`、`auto`、`ephemeral` 会提示不支持，并阻止导入与切号
-- Claude 面板使用官方 Claude Code CLI。设置了 `CLAUDE_CONFIG_DIR` 时使用该目录，否则使用 `~/.claude`。订阅用量需要 Claude.ai 登录。API Key 或网关不提供这份用量。执行 `claude auth login` 后当前登录会自动加入，之后用其他账号登录也会自动加入；也可以粘贴凭据 JSON 或从文件导入
+- Claude 面板从 `CLAUDE_CONFIG_DIR`（未设置时为 `~/.claude`）读取 Claude Code 配置，订阅用量需要 Claude.ai 登录，API Key 或网关不提供这份用量；浏览器登录无需安装或先运行 CLI，在你显式切换前只写账号库；已有 CLI 登录会自动加入，也可粘贴凭据 JSON 或从文件导入；真实浏览器授权和切号仍需隔离账号验收
 - 使用 Grok 面板前需要安装 [官方 Grok CLI](https://docs.x.ai/build/overview)：
 
   ```bash
@@ -148,7 +148,7 @@ Linux 需要 GTK3、AppIndicator、支持托盘的桌面，以及可用的 Secre
 ## 隐私
 
 - Quosparr 的自有数据保存在 `~/.quosparr`，不向 `~/.codex` 写入应用缓存，默认只保存非密钥的派生数据
-- 服务商账号凭据是唯一例外，保存在 `~/.quosparr/accounts/<id>/auth.json`（目录 `0700`、文件 `0600`，原子写入；Windows 使用仅当前用户可访问的 ACL），账号索引不包含 token
+- 服务商账号凭据与上文明确确认的 Desktop 配置档为受控例外，账号凭据保存在 `~/.quosparr/accounts/<id>/auth.json`（目录 `0700`、文件 `0600`，原子写入；Windows 使用仅当前用户可访问的 ACL），账号索引不包含 token
 - 官方 `~/.codex/auth.json` 仅在 OAuth 刷新回写或你确认切号时写入；刷新非当前账号只更新账号库副本
 - Claude 凭据在 macOS 上经 `/usr/bin/security` 读取钥匙串，在 Windows 与 Linux 上读取 `<config>/.credentials.json`。托管副本位于 `~/.quosparr/accounts/claude-<stable-id>/auth.json`，只含 `claudeAiOauth`。索引 `claude-index.json` 不含 token。切号保留 MCP 令牌，并只替换 `.claude.json` 的 `oauthAccount`。Quosparr 不刷新当前账号
 - API 账号的 Key 只保存在托管副本（`~/.quosparr/accounts/<id>/auth.json` 或 `claude-api-<id>/auth.json`），索引只保存 Base URL、模型与余额缓存。余额与模型请求只发往你填写的站点，并遵循代理设置。被修改的 `config.toml` 与 `settings.json` 会先备份到 `~/.quosparr/backups`；首次写入 `settings.json` 时会按键名重新排序
@@ -163,8 +163,8 @@ Linux 需要 GTK3、AppIndicator、支持托盘的桌面，以及可用的 Secre
 
 - **Codex 额度 / reset credits / 官方用量**：使用本机凭据请求 ChatGPT / Codex 官方后端接口；官方用量属于当前账号，可能延迟或修订
 - **周额度推算**：非官方，根据周用量百分比与每日 Credits 推算（1000 Credits ≈ 40 美元，版本 `credits-usd-2026-08-26`），`quota-estimate-history.json` 只保存派生的 Credits 与占用率
-- **Codex API 等价成本**：基于本机会话日志，使用内置价格表 `openai-builtin-2026-09-27`，在线官方价格表采用 `openai-docs-` 版本；未知模型不报告精确费用
-- **Claude Code 订阅用量**：来自未公开的 OAuth usage 端点，只表示当前 Claude Code 订阅，不写成官方计费接口。不读取浏览器 Cookie、Claude Desktop 数据或 Console API 账单
+- **Codex API 等价成本**：基于本机会话日志，使用内置价格表 `openai-builtin-2026-09-27`，支持的当前费率来自 models.dev，并保留已核实的内置规则；未知模型不报告精确费用
+- **Claude Code 订阅用量**：来自未公开的 OAuth usage 端点，只表示当前 Claude Code 订阅，不写成官方计费接口。不读取浏览器 Cookie 或 Console API 账单，Desktop 配置档仅由上述独立且明确确认的功能管理
 - **Claude API 等价成本**：基于 Claude Code 本机会话日志和价格表 `anthropic-builtin-2026-10-14`。同一条回复按消息 ID 只计一次。缓存写入分为 5 分钟和 1 小时，Fast 档单独计价。未知模型不报告精确费用。按日统计使用本地时区
 - **Grok 额度**：只使用官方 CLI chat-proxy `/v1/billing?format=credits` 接口；不读取浏览器 Cookie、不从本地日志伪造额度，也不混入 API 账单
 - **Grok API 等价成本**：基于本地 `turn_completed` 用量和价格表 `xai-builtin-2026-09-27`，区分输入、缓存、输出及长上下文价格；`costUsdTicks` 属于订阅额度记账，不作为 API 等价成本

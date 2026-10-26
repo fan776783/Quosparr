@@ -55,8 +55,8 @@ func renderClaudeAccounts(c *ui.Context, u *settingsUI, f *accountForm, rt *live
 	rows := view.Sidebar
 	folder := accountFolder{l.Text(l10n.KeyProviderClaude), rt.claudeFolder()}
 	accountToolbar(c, u, f, accountCountTitle(l, len(rows)), folder, func(m *ui.Menu) {
-		if m.Item(l.Text(l10n.KeyClaudeLoginCLI)).Chosen() {
-			u.accountNotice(f, rt.claudeLoginHint(l))
+		if m.Item(l.Text(l10n.KeyAccountsAddOAuth)).Chosen() {
+			u.startClaudeLogin(f, rt)
 		}
 		if m.Item(l.Text(l10n.KeyClaudePasteHint)).Chosen() {
 			f.mode = "paste"
@@ -77,6 +77,9 @@ func renderClaudeAccounts(c *ui.Context, u *settingsUI, f *accountForm, rt *live
 		return rt.refreshClaudeAll(context.Background())
 	})
 	accountEditor(c, u, f)
+	renderClaudeLogin(c, u, f)
+	desktopRecoveryButton(c, l, &f.desktop, rt)
+	renderDesktopDialog(c, u.L(), &f.desktop, rt, u.post)
 	if len(rows) == 0 {
 		ui.Text(c, l.Text(l10n.KeyClaudeAccountsEmpty)).FontSize(12).TextColor(c.Theme().TextMuted)
 	}
@@ -107,7 +110,15 @@ func renderClaudeAccountRow(c *ui.Context, u *settingsUI, f *accountForm, rt *li
 		accountSettingsIdentity(c, l, accountIdentityView{account: acc, current: acc.ID == current, privacy: priv, provider: store.ProviderClaude, claudeQuota: quota})
 		ui.MenuButton(c, l.Text(l10n.KeyAccountsActions), func(m *ui.Menu) {
 			if m.Item(l.Text(l10n.KeyAccountsMakeCurrent)).Disabled(acc.ID == current).Chosen() {
-				f.mode, f.editID, f.switchName, f.switchRelay = "claude-switch", acc.ID, name, acc.IsRelay()
+				f.mode, f.editID, f.switchName, f.switchRelay = "claude-switch", acc.ID, name, acc.AuthMode == codex.AuthModeAPIKey
+				f.desktopSwitch = false
+			}
+			if acc.AuthMode != codex.AuthModeAPIKey && m.Item(tx(l, xDesktopBind)).Chosen() {
+				f.desktop = newDesktopDialog(rt, acc.ID, priv)
+			}
+			if acc.AuthMode != codex.AuthModeAPIKey && m.Item(tx(l, xDesktopOpen)).Disabled(!desktopBound(rt, acc.ID)).Chosen() {
+				f.desktop = newDesktopDialog(rt, acc.ID, priv)
+				f.desktop.openOnly = true
 			}
 			if acc.IsRelay() && m.Item(tx(l, xAPIEditMenu)).Chosen() {
 				f.openClaudeAPIEditor(rt, acc.ID)
@@ -189,6 +200,9 @@ type accountForm struct {
 	editorError        string
 	busy               bool
 	cancel             context.CancelFunc
+	claudeLogin        *claudeLoginAttempt
+	desktop            *desktopDialog
+	desktopSwitch      bool
 	selection          *accountSelection
 	restartAfterSwitch bool
 	switchName         string
