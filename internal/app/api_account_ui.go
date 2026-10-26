@@ -381,7 +381,7 @@ func apiSavedText(l l10n.Localizer, mode string, apply apiApply) string {
 	return tx(l, xAPISavedApplied, product)
 }
 
-// apiErrorText localizes an API account error; "" when err is not one.
+// apiErrorText localizes API validation and classifies other failures safely.
 func apiErrorText(l l10n.Localizer, err error) string {
 	switch {
 	case err == nil:
@@ -400,19 +400,19 @@ func apiErrorText(l l10n.Localizer, err error) string {
 	case errors.Is(err, claude.ErrAPIUnauthorized), errors.Is(err, apiquota.ErrUnauthorized):
 		return tx(l, xAPIKeyRejected)
 	case errors.Is(err, claude.ErrAPIUnavailable):
-		return tx(l, xAPIBalanceFailed)
+		return accountFailure(l, tx(l, xAPIBalanceFailed), err)
 	}
 	if key := netx.L10nKey(err); key != "" {
-		return l.Text(key)
+		return accountFailure(l, l.Text(key), err)
 	}
-	return ""
+	return accountErrorReason(l, err)
 }
 
 func apiModelsErrorText(l l10n.Localizer, err error) string {
-	if text := apiErrorText(l, err); text != "" {
-		return text
+	if err == nil {
+		return ""
 	}
-	return tx(l, xAPIModelsFailed)
+	return tx(l, xAPIModelsFailed) + "\n" + apiErrorText(l, err)
 }
 
 // apiBalanceSummary is the one-line balance of an API account row: the
@@ -452,9 +452,9 @@ func apiBalanceValue(l l10n.Localizer, q apiquota.Quota) string {
 	return runway.APIBalanceDetail(q)
 }
 
-// apiBalanceBlock is the balance part of a panel account card: a bar when
-// the total is known, else the amount alone.
-func apiBalanceBlock(c *ui.Context, l l10n.Localizer, q *apiquota.Quota, current bool) {
+// apiBalanceBlock is the balance part of an account card: a bar when the
+// total is known, else the amount alone.
+func apiBalanceBlock(c *ui.Context, l l10n.Localizer, q *apiquota.Quota, view accountQuotaOptions) {
 	if q == nil {
 		calloutDim(c, l.Text(l10n.KeyNotLoaded)).FontSize(fsCaption)
 		return
@@ -468,13 +468,13 @@ func apiBalanceBlock(c *ui.Context, l l10n.Localizer, q *apiquota.Quota, current
 	f, ok := q.UsedFraction()
 	if !ok {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, title).FontSize(fsCaption).FontWeight(500).TextColor(inkSecondary(c.Theme())).Grow(1).Basis(0)
-			ui.Text(c, value).FontSize(fsCaption).FontWeight(600).FontFeatures("tnum").SingleLine()
+			ui.Text(c, title).FontSize(11).FontWeight(600).Grow(1).Basis(0)
+			ui.Text(c, value).FontSize(fsCallout).FontWeight(600).FontFeatures("tnum").SingleLine()
 		})
 		return
 	}
 	used := min(100, max(0, int(f*100+0.5)))
-	accountMeter(c, l, meterSpec{title: title, remaining: 100 - used, used: used, trailing: value, current: current})
+	accountMeter(c, l, meterSpec{title: title, remaining: 100 - used, used: used, trailing: value, current: view.current}, view)
 }
 
 // apiTierBadge is the "API" plan badge of a relay account, the same for

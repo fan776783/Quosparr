@@ -18,6 +18,17 @@ type accountIdentityView struct {
 	current, privacy bool
 	grokQuota        *runway.GrokAccountQuota
 	claudeQuota      *runway.ClaudeAccountQuota
+	// quota carries the reset format and the credits switch of the
+	// preferences; the zero value keeps the defaults.
+	quota accountQuotaOptions
+}
+
+// quotaOptions lays a settings row's quota out wide; its update time stays
+// in the header.
+func (v accountIdentityView) quotaOptions() accountQuotaOptions {
+	o := v.quota
+	o.current, o.wide = v.current, true
+	return o
 }
 
 func accountSettingsIdentity(c *ui.Context, l l10n.Localizer, v accountIdentityView) {
@@ -77,20 +88,31 @@ func accountSettingsStatus(c *ui.Context, l l10n.Localizer, v accountIdentityVie
 		ui.Text(c, diag).FontSize(11).TextColor(sys(c.Theme(), sysOrange)).MaxLines(2).Tooltip(diag)
 		return
 	}
+	view := v.quotaOptions()
 	switch {
 	case acc.IsRelay():
-		apiBalanceBlock(c, l, acc.APIQuota, v.current)
+		apiBalanceBlock(c, l, acc.APIQuota, view)
 	case v.provider == store.ProviderClaude:
-		claudeQuotaBlock(c, l, v.claudeQuota, accountQuotaOptions{current: v.current})
+		claudeQuotaBlock(c, l, v.claudeQuota, view)
 	case v.provider == store.ProviderGrok:
-		grokQuotaBlock(c, l, v.grokQuota, accountQuotaOptions{current: v.current})
+		grokQuotaBlock(c, l, v.grokQuota, view)
 	default:
-		codexQuotaBlock(c, l, acc, accountQuotaOptions{current: v.current})
+		codexQuotaBlock(c, l, acc, view)
 	}
 }
 
+// accountRowFade is how a settings account row lights up under the pointer.
+var accountRowFade = ui.Animation{Duration: 180 * time.Millisecond, Ease: ui.EaseInOut}
+
+// accountSettingsRow is one account; its wash reaches past the content into
+// the box's padding and fades in and out under the pointer.
 func accountSettingsRow(c *ui.Context, l l10n.Localizer, v accountIdentityView, controls func()) {
-	ui.Column(c).Gap(4).Padding(10, 0).Children(func() {
+	row := ui.Column(c.Key("account-row-"+string(v.provider)+"-"+v.account.ID)).Gap(4).Padding(10, 8).Margin(0, -8).Radius(8)
+	wash := ui.Transparent
+	if row.Hovered() {
+		wash = pal(c.Theme()).Hover
+	}
+	row.Background(row.AnimateColor("hover", wash, accountRowFade)).Children(func() {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			ProviderIcon(c, v.provider, 20)
 			accountSettingsIdentityInfo(c, l, v)
