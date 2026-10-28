@@ -264,7 +264,8 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 	svc = runway.New(runway.Options{
 		PricingVersion: func() string { return priceSource.PriceBook(context.Background()).Version() },
 		Sources: runway.NewLiveSources(runway.LiveConfig{
-			Store: codexStore, CodexHome: platform.CodexDir(home),
+			LegacyStop: prepareCodexDesktopRestart,
+			Store:      codexStore, CodexHome: platform.CodexDir(home),
 			Quota: codexapi.QuotaClient{}, Refresher: codexapi.TokenRefresher{}, Repo: repo, Prices: priceSource,
 		}),
 		Preferences:         prefs,
@@ -396,7 +397,7 @@ func (rt *liveApp) panelActions(s *Settings) PanelActions {
 					message = rt.switchCodex(l, id, name)
 				}
 				if message != "" {
-					runOnMain(func() { ShowDialog(l.Text(l10n.KeyAccountsSwitchFailed), message) })
+					runOnMain(func() { ShowDialog(l.Text(providerKey(p.SelectedProvider)), message) })
 				}
 			}()
 		},
@@ -876,9 +877,7 @@ func buildGrokState(mod *grok.Module, lc l10n.Localizer) runway.GrokState {
 	if snap == nil {
 		return st
 	}
-	if snap.Plan != nil {
-		st.Plan = *snap.Plan
-	}
+	st.Plan, st.PlanBillingSystem, st.PlanError = grokPlanProjection(*snap)
 	if !snap.UpdatedAt.IsZero() {
 		st.UpdatedAt = snap.UpdatedAt
 	}
@@ -1002,8 +1001,7 @@ func grokWidget(st runway.GrokState) *export.ProviderSnapshot {
 		Provider: export.ProviderGrok, Availability: widgetAvailability(st.Availability),
 		TokenSource: export.TokensThisMac,
 	}
-	if st.Plan != "" {
-		plan := st.Plan
+	if plan, ok := grok.SafeTierDisplayName(st.Plan); ok {
 		p.Plan = &plan
 	}
 	if !st.UpdatedAt.IsZero() {
