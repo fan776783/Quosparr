@@ -184,10 +184,16 @@ jobs:
           export -f python3
           export V1_BUILD_DIR="$PWD/build/fork-windows"
           bash Scripts/package-v1-platform.sh windows/amd64
+      - name: Prepare Windows installation verifier
+        if: steps.assets.outputs.needed == 'true'
+        run: |
+          # Build the immutable release tag, but use this run's verification fixes.
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:Scripts/verify-v1-windows-native.ps1" > "$RUNNER_TEMP/verify-v1-windows-native.ps1"
       - name: Verify native Windows installation
         if: steps.assets.outputs.needed == 'true'
         shell: pwsh
-        run: ./Scripts/verify-v1-windows-native.ps1 -Stage "build/fork-windows/windows-amd64" -Arch amd64
+        run: '& (Join-Path $env:RUNNER_TEMP "verify-v1-windows-native.ps1") -Stage "build/fork-windows/windows-amd64" -Arch amd64'
       - name: Upload Windows release assets
         if: steps.assets.outputs.needed == 'true'
         env:

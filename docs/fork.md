@@ -20,6 +20,7 @@
 - fork 的 `-cursor.N` 版本始终使用自己的 stable 更新源与公钥。macOS 发布通过 `FORK_ADHOC_PACKAGE=1` 保留现有 ad-hoc 应用签名，不做 Apple 公证；更新归档仍使用 fork 私钥签名。该模式只接受 fork 版本及更新仓库，上游正式发布继续要求 Developer ID 签名和公证，首次安装可能需要在系统设置中允许打开
 - 同步成功后，独立 Windows x64 job 检查同版本 Release：缺少全部 Windows 附件时，从该 Release 的标签检出源码，以同一 `FORK_UPDATE_PRIVATE_KEY` 构建正式包（更新器开启），通过归档验签及 Windows 原生安装、卸载、SQLite 检查后，追加 `Quosparr.Setup.<version>.amd64.exe`、`quosparr-<version>-windows-amd64.tar.gz` 和 `update-windows-amd64.json`；更新清单最后上传。macOS 发布后、Windows job 完成前，Release 暂时只有 macOS 包
 - Windows 三个附件已完整存在时跳过；因此重跑 Fork Sync 也能给已有版本补包。部分附件存在、附件为空或网络查询失败时停止，不覆盖已有文件、不移动标签；需核对上次上传后再处理。Windows 写权限同样只授予限定本 fork 的发布 job
+- Windows 安装验证脚本取触发本次 workflow 的提交，应用和打包源码仍取发布标签；这样可以修复旧标签的验收脚本并补包，同时保持已发布版本的源码一致。校验排除打包器额外生成的 `install.ps1` 下载辅助脚本，继续逐项检查实际安装文件
 - 手动运行时可勾选 `windows_only`：仅为当前 `mygo.json` 版本的已有 Release 补 Windows 包，跳过上游合并与 macOS 发布；定时运行仍按正常同步流程执行
 - 普通 CI 还会执行 Windows / Linux 原生测试、安装器验证与 macOS 双架构开发包检查；Fork Sync 的共用检查不替代这些平台验收。GitHub macOS ARM runner 容量不足时任务可能未启动，恢复容量后可重跑；代码冲突必须先手动解决
 - 运行失败由 GitHub 的定时 workflow 通知邮件提醒（fork 未开启 issues）

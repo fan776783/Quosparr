@@ -86,11 +86,13 @@ class PlatformPackages(unittest.TestCase):
     def test_windows_review_archive_contains_only_runtime_payload(self):
         with tempfile.TemporaryDirectory() as temporary:
             stage = pathlib.Path(temporary)
-            files = {"Quosparr.exe": b"application-with-embedded-sqlite", "LICENSE": b"license"}
+            files = {"Quosparr.exe": b"application-with-embedded-sqlite", "LICENSE": b"license",
+                     "support.ps1": b"application-resource"}
             for name, data in files.items():
                 (stage / name).write_bytes(data)
             (stage / "quosparr-setup-1.0.0-amd64.exe").write_bytes(b"installer")
             (stage / "update-windows-amd64.json").write_bytes(b"must-not-archive")
+            (stage / "install.ps1").write_bytes(b"download-helper-not-installed")
             package.archive_windows({"version": "1.0.0"}, stage, "windows/amd64")
             archive = package.tar_members((stage / "quosparr-1.0.0-windows-amd64.tar.gz").read_bytes())
             self.assertEqual({name: value[0] for name, value in archive.items()}, files)
