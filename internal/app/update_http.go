@@ -25,9 +25,12 @@ const (
 )
 
 // updateFeed returns the URL of the update manifest of the build with
-// version for goos/goarch. The release workflow builds prerelease versions
-// for the beta channel only and release versions for stable only.
+// version for goos/goarch. Fork versions use their own stable feed; upstream
+// prerelease versions use beta and upstream release versions use stable.
 func updateFeed(version, goos, goarch string) string {
+	if feed := forkUpdateFeed(version, goos, goarch); feed != "" {
+		return feed
+	}
 	feed := stableUpdateFeed
 	if strings.Contains(version, "-") {
 		feed = betaUpdateFeed

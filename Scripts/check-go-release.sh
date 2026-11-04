@@ -14,3 +14,4 @@ python3 Scripts/Tests/test-v1-homebrew.py
 python3 Scripts/Tests/test-v1-platform.py
 python3 Scripts/Tests/test-workflow-drafts.py
 python3 Scripts/Tests/test-fork-merge.py
+python3 Scripts/Tests/test-fork-release.py

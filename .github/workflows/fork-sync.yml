@@ -56,7 +56,11 @@ jobs:
           version="$(python3 -c 'import json; print(json.load(open("mygo.json"))["version"])')"
           # Detect workflow-token limitations before the expensive build checks.
           if ! git diff --quiet origin/main HEAD -- .github/workflows; then
-            echo "Upstream changed workflow files; sync locally with workflow-capable credentials (docs/fork.md)." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Upstream changed workflow files; sync locally with workflow-capable credentials (docs/fork.md)."
+            {
+              echo "Upstream changed workflow files; sync locally with workflow-capable credentials (docs/fork.md)."
+              git diff --name-only origin/main HEAD -- .github/workflows
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           changed=false
@@ -192,7 +196,7 @@ jobs:
           stage="$PWD/build/fork-windows/windows-amd64"
           go run ./Scripts/release-assets verify -config build/fork-windows/config/mygo.json -dir "$stage" -targets windows-amd64
           installer="Quosparr.Setup.$FORK_VERSION.amd64.exe"
-          cp "$stage/Quosparr Setup $FORK_VERSION amd64.exe" "$stage/$installer"
+          cp "$stage/quosparr-setup-$FORK_VERSION-amd64.exe" "$stage/$installer"
           gh release upload "v$FORK_VERSION" --repo "$GITHUB_REPOSITORY" \
             "$stage/$installer" "$stage/quosparr-$FORK_VERSION-windows-amd64.tar.gz"
           # Expose the signed update manifest only after its payload is uploaded.

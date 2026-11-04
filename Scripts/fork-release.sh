@@ -27,12 +27,12 @@ HEAD="$(git rev-parse HEAD)"
 
 WORK="$ROOT/build/fork-release-$ARCH"
 rm -rf "$WORK"
-MYGO_UPDATE_PRIVATE_KEY="$(cat "$KEY")" V1_DEVELOPMENT_PACKAGE=0 V1_BUILD_DIR="$WORK" ARCH="$ARCH" \
+MYGO_UPDATE_PRIVATE_KEY="$(cat "$KEY")" V1_DEVELOPMENT_PACKAGE=0 FORK_ADHOC_PACKAGE=1 V1_BUILD_DIR="$WORK" ARCH="$ARCH" \
   bash "$ROOT/Scripts/package-v1-app.sh"
 go run ./Scripts/release-assets verify -config "$WORK/config/mygo.json" -dir "$WORK" -targets "darwin-$GOARCH"
 
 gh release create "$TAG" -R "$REPO" --target "$HEAD" --latest --title "Quosparr $VERSION" \
-  --notes "Fork build of upstream v${VERSION%%-cursor.*} with Cursor quota monitoring." \
+  --notes "Fork build of upstream v${VERSION%%-cursor.*} with Cursor quota monitoring. macOS app uses ad-hoc signing and is not Apple-notarized; update archives are signed with the fork's update key." \
   "$WORK/Quosparr-macos-$ARCH.zip" "$WORK/Quosparr-macos-$ARCH.dmg" \
   "$WORK/quosparr-$VERSION-darwin-$GOARCH.tar.gz" "$WORK/update-darwin-$GOARCH.json"
 printf 'Published %s: https://github.com/%s/releases/tag/%s\n' "$TAG" "$REPO" "$TAG"

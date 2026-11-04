@@ -149,7 +149,7 @@ class DraftWorkflowTests(unittest.TestCase):
                 recorder.chmod(0o755)
             stage = root / "build/fork-windows/windows-amd64"
             stage.mkdir(parents=True)
-            for name in (f"Quosparr Setup {version} amd64.exe",
+            for name in (f"quosparr-setup-{version}-amd64.exe",
                          f"quosparr-{version}-windows-amd64.tar.gz", "update-windows-amd64.json"):
                 (stage / name).write_text("offline command fixture")
             env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"],

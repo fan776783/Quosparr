@@ -11,6 +11,12 @@ case "$ARCH" in
 esac
 DEVELOPMENT="${V1_DEVELOPMENT_PACKAGE:-0}"
 case "$DEVELOPMENT" in 0) SUFFIX= ;; 1) SUFFIX=-dev ;; *) printf 'V1_DEVELOPMENT_PACKAGE must be 0 or 1\n' >&2; exit 2 ;; esac
+FORK_ADHOC="${FORK_ADHOC_PACKAGE:-0}"
+case "$FORK_ADHOC" in 0|1) ;; *) printf 'FORK_ADHOC_PACKAGE must be 0 or 1\n' >&2; exit 2 ;; esac
+if [[ "$FORK_ADHOC" == 1 ]]; then
+  [[ "$DEVELOPMENT" == 0 && -z "${MACOS_DEV_IDENTITY:-}" ]] || { printf 'Fork ad-hoc mode requires a release build without MACOS_DEV_IDENTITY\n' >&2; exit 1; }
+  python3 "$ROOT/Scripts/fork_release_config.py" "${V1_CONFIG_PATH:-$ROOT/mygo.json}"
+fi
 WORK="${V1_BUILD_DIR:-$ROOT/build/v1-$ARCH}"
 APP="$WORK/darwin-$GOARCH/Quosparr.app"
 CONTENTS="$APP/Contents"
@@ -29,11 +35,14 @@ trap 'rm -rf "$CONFIG_STAGE"' EXIT
 if [[ "$DEVELOPMENT" == 0 ]]; then
   export MYGO_UPDATER_PRIVATE_KEY="${MYGO_UPDATE_PRIVATE_KEY:-${MYGO_UPDATER_PRIVATE_KEY:-}}"
   [[ -n "$MYGO_UPDATER_PRIVATE_KEY" ]] || { printf 'Missing MYGO_UPDATE_PRIVATE_KEY\n' >&2; exit 1; }
-  # Release apps are Developer ID signed and notarized, never ad hoc
-  for key in MACOS_DEV_IDENTITY APPLE_API_KEY_PATH APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
-    [[ -n "${!key:-}" ]] || { printf 'Missing %s\n' "$key" >&2; exit 1; }
-  done
-  [[ -f "$APPLE_API_KEY_PATH" ]] || { printf 'Missing App Store Connect API key file\n' >&2; exit 1; }
+  # Upstream releases require notarization; the fork explicitly retains its
+  # existing ad-hoc app signature and separately signed update archive.
+  if [[ "$FORK_ADHOC" == 0 ]]; then
+    for key in MACOS_DEV_IDENTITY APPLE_API_KEY_PATH APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
+      [[ -n "${!key:-}" ]] || { printf 'Missing %s\n' "$key" >&2; exit 1; }
+    done
+    [[ -f "$APPLE_API_KEY_PATH" ]] || { printf 'Missing App Store Connect API key file\n' >&2; exit 1; }
+  fi
 fi
 V1_DEVELOPMENT_PACKAGE="$DEVELOPMENT" python3 "$ROOT/Scripts/stage-v1-config.py" "$ROOT" "$CONFIG_STAGE"
 mkdir -p "$WORK/config"
@@ -101,7 +110,7 @@ runway_codesign "$CONTENTS/Resources/libmygo-sqlite3.dylib" "$HOST_ID.sqlite"
 runway_codesign "$WIDGET" "$HOST_ID.widget" "$WIDGET_ENTITLEMENTS"
 runway_codesign "$APP" "$HOST_ID" "$APP_ENTITLEMENTS"
 bash "$ROOT/Scripts/verify-v1-app.sh" "$APP" "$ARCH" "$WORK/config/mygo.json"
-[[ "$DEVELOPMENT" == 1 ]] || runway_notarize "$APP"
+[[ "$DEVELOPMENT" == 1 || "$FORK_ADHOC" == 1 ]] || runway_notarize "$APP"
 ZIP="$WORK/Quosparr-macos-$ARCH$SUFFIX.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
@@ -118,7 +127,9 @@ if [[ "$DEVELOPMENT" == 0 ]]; then
   DMG="$WORK/Quosparr-macos-$ARCH.dmg"
   hdiutil create -volname Quosparr -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null
   rm -rf "$DMG_ROOT"
-  codesign --force --timestamp --sign "$MACOS_DEV_IDENTITY" "$DMG"
-  runway_notarize "$DMG"
-  printf 'Final mygo archive and DMG generated from the verified, notarized bundle\n'
+  if [[ "$FORK_ADHOC" == 0 ]]; then
+    codesign --force --timestamp --sign "$MACOS_DEV_IDENTITY" "$DMG"
+    runway_notarize "$DMG"
+  fi
+  printf 'Final mygo archive and DMG generated from the verified bundle\n'
 fi
