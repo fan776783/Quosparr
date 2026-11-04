@@ -15,7 +15,7 @@ cd "$ROOT"
 mkdir -p "$ROOT/.build"
 CONFIG_STAGE="$(mktemp -d "$ROOT/.build/v1-package-config.XXXXXX")"
 trap 'rm -rf "$CONFIG_STAGE"' EXIT
-[[ "$(go list -m -f '{{.Version}}' github.com/egoist/mygo)" == v0.6.2 ]]
+[[ "$(go list -m -f '{{.Version}}' github.com/egoist/mygo)" == v0.7.4 ]]
 V1_DEVELOPMENT_PACKAGE="$DEVELOPMENT" python3 "$ROOT/Scripts/stage-v1-config.py" "$ROOT" "$CONFIG_STAGE"
 mkdir -p "$WORK/config"
 cp "$CONFIG_STAGE/mygo.json" "$WORK/config/mygo.json"
@@ -36,7 +36,7 @@ go version -m "$EXECUTABLE" | python3 -c 'import sys; tags=[line.strip().split("
 VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$WORK/config/mygo.json")"
 if [[ "$TARGET" == windows/* ]]; then
   [[ ! -e "$STAGE/mygo-sqlite3.dll" ]] || { printf 'Windows SQLite must be embedded in the executable\n' >&2; exit 1; }
-  [[ -f "$STAGE/Quosparr Setup $VERSION ${TARGET#*/}.exe" ]] || { printf 'NSIS installer missing; install makensis\n' >&2; exit 1; }
+  [[ -f "$STAGE/quosparr-setup-$VERSION-${TARGET#*/}.exe" ]] || { printf 'NSIS installer missing; install makensis\n' >&2; exit 1; }
 fi
 if [[ "$DEVELOPMENT" == 1 ]]; then
   # Mygo writes unsigned Linux archives itself; Windows needs a review archive.
@@ -50,7 +50,7 @@ if [[ "$DEVELOPMENT" == 1 ]]; then
   exit 0
 fi
 # Add the explicit SHA256 field and re-sign the unchanged CLI archive
-# mygo v0.6.2 authenticates the SHA256 digest and ignores extra JSON fields
+# mygo v0.7.4 authenticates the SHA256 digest and ignores extra JSON fields
 go run ./Scripts/release-assets sign -config "$WORK/config/mygo.json" -dir "$STAGE" -targets "${TARGET//\//-}"
 go run ./Scripts/release-assets verify -config "$WORK/config/mygo.json" -dir "$STAGE" -targets "${TARGET//\//-}"
 python3 "$ROOT/Scripts/verify-v1-platform.py" verify "$WORK/config/mygo.json" "$STAGE" "$TARGET"
