@@ -11,7 +11,7 @@
 
 ## 自动同步
 
-`.github/workflows/fork-sync.yml` 每 6 小时（也可在 Actions 页手动运行）合并上游 `Licoy/Quosparr` 的 main：
+`.github/workflows/fork-sync.yml` 每天 UTC 00:17（北京时间 08:17，也可在 Actions 页手动运行）合并上游 `Licoy/Quosparr` 的 main：
 
 - `Scripts/fork-merge.sh` 先合并但不提交，叠加 fork 配置后再生成一个合并提交；只有 `mygo.json` 冲突时自动解决：保留上游其他字段，写回 fork 的公钥与仓库；上游升版时版本号改为 `<上游版本>-cursor.1`，上游预发布版本不自动同步
 - 其他冲突、测试失败，或上游改动了 `.github/workflows`（`GITHUB_TOKEN` 无权推送 workflow 文件，构建前检查）时不推送，运行失败并在摘要中列出原因，需按下方步骤手动同步
