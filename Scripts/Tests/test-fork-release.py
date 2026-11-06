@@ -6,6 +6,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 
@@ -107,6 +108,23 @@ class ForkReleaseTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Missing MYGO_UPDATE_PRIVATE_KEY", result.stderr)
         self.assertFalse((self.root / "build-reached").exists())
+
+    def test_windows_archive_preserves_other_powershell_resources(self):
+        self.write_config()
+        stage = self.root / "windows"
+        stage.mkdir()
+        files = {"Quosparr.exe": b"application-with-embedded-sqlite", "LICENSE": b"license",
+                 "support.ps1": b"application-resource"}
+        for name, data in files.items():
+            (stage / name).write_bytes(data)
+        (stage / "install.ps1").write_bytes(b"download-helper-not-installed")
+        result = subprocess.run([sys.executable, str(ROOT / "Scripts/verify-v1-platform.py"),
+                                 "archive-windows", str(self.root / "mygo.json"), str(stage), "windows/amd64"],
+                                env=self.env, text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        with tarfile.open(stage / f"quosparr-{self.config['version']}-windows-amd64.tar.gz", "r:gz") as archive:
+            archived = {member.name: archive.extractfile(member).read() for member in archive}
+        self.assertEqual(archived, files)
 
 
 if __name__ == "__main__":
