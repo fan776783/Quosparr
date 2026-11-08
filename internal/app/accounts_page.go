@@ -186,8 +186,10 @@ type accountForm struct {
 	selection          *accountSelection
 	restartAfterSwitch bool
 	runtimeApply       bool
+	shareProjects      bool
 	switchName         string
 	switchRelay        bool
+	switchShare        bool
 	api                apiDraft
 }
 
