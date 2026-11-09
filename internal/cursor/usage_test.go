@@ -103,6 +103,9 @@ func TestMalformedAndChangedProtocolDoNotBecomeFreeQuota(t *testing.T) {
 		usageFixture(pctField(12, math.NaN())), usageFixture(pctField(12, -1)),
 		usageFixture(intField(12, 1)), usageFixture(join(pctField(12, 10), pctField(12, 20))),
 		usageFixture(intField(10, math.MaxUint64)),
+		usageFixture(join(pctField(12, 10), pctField(13, 0), intField(14, 8))),
+		usageFixture(join(pctField(12, 10), pctField(13, 0), pctField(14, math.NaN()))),
+		usageFixture(join(pctField(12, 10), pctField(13, 0), intField(1, math.MaxUint64))),
 	} {
 		if _, err := ParseUsage(planFixture(false), body, sampleNow); err == nil {
 			t.Fatal("invalid response accepted")
@@ -188,6 +191,104 @@ func TestSplitPoolsWithoutTotalAndIncludedSpend(t *testing.T) {
 	}
 	if len(q.Pools) != 2 || q.Pools[0].Kind != "auto" || *q.Pools[0].UsedPercent != 21.3 || q.Pools[1].Kind != "api" || *q.Pools[1].UsedPercent != 9.3 {
 		t.Fatal("model pools not separate or a total pool was added")
+	}
+}
+
+func TestSplitPoolsEstimateAmountsWithoutUsageEvents(t *testing.T) {
+	for _, tc := range []struct {
+		name                string
+		total               uint64
+		auto, api, totalPct float64
+		autoUsed, apiUsed   int64
+	}{
+		{"unused other models", 742, 742.0 / 105000 * 100, 0, 742.0 / 125000 * 100, 742, 0},
+		{"unused Cursor models", 1000, 0, 5, 0.8, 0, 1000},
+		{"both pools used", 799, 792.0 / 105000 * 100, 0.035, 0.6392, 792, 7},
+		{"bonus spend included", 24243, 22384.0 / 105000 * 100, 9.295, 24243.0 / 125000 * 100, 22384, 1859},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := join(intField(1, tc.total), intField(2, 2000), intField(5, 2000), pctField(12, tc.auto), pctField(13, tc.api), pctField(14, tc.totalPct))
+			q, err := ParseUsage(planFixture(false), usageFixture(p), sampleNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, want := range []struct{ used, limit int64 }{{tc.autoUsed, 105000}, {tc.apiUsed, 20000}} {
+				pool := q.Pools[i]
+				if pool.UsedCents == nil || pool.LimitCents == nil || *pool.UsedCents != want.used || *pool.LimitCents != want.limit || !pool.LimitEstimated {
+					t.Fatalf("pool %s: used %v, limit %v; want %d / %d estimated", pool.Kind, pool.UsedCents, pool.LimitCents, want.used, want.limit)
+				}
+			}
+		})
+	}
+}
+
+func TestSplitPoolsCannotEstimateAmbiguousOrCappedAmounts(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		pool []byte
+	}{
+		{"unused cycle", join(pctField(12, 0), pctField(13, 0), pctField(14, 0))},
+		{"missing total spend", join(pctField(12, 10), pctField(13, 0), pctField(14, 8))},
+		{"missing combined percentage", join(intField(1, 1000), pctField(12, 10), pctField(13, 0))},
+		{"missing other percentage", join(intField(1, 1000), pctField(12, 10), pctField(14, 8))},
+		{"equal percentages", join(intField(1, 1000), pctField(12, 10), pctField(13, 10), pctField(14, 10))},
+		{"Cursor pool capped", join(intField(1, 1000), pctField(12, 100), pctField(13, 0), pctField(14, 80))},
+		{"other pool near cap", join(intField(1, 1000), pctField(12, 0), pctField(13, 99.5), pctField(14, 20))},
+		{"inconsistent combined percentage", join(intField(1, 1000), pctField(12, 10), pctField(13, 5), pctField(14, 20))},
+		{"no positive split", join(intField(1, 1000), pctField(12, 10), pctField(13, 0), pctField(14, 10))},
+		{"overflow", join(intField(1, 1000), pctField(12, 1e-300), pctField(13, 0), pctField(14, 1e-301))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q, err := ParseUsage(planFixture(false), usageFixture(tc.pool), sampleNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, p := range q.Pools {
+				if p.UsedCents != nil || p.LimitCents != nil || p.LimitEstimated {
+					t.Fatal("underdetermined percentages manufactured amounts")
+				}
+			}
+		})
+	}
+}
+
+func TestSplitPoolServerAmountsTakePrecedence(t *testing.T) {
+	for _, limit := range []uint64{20000, 50000} {
+		p := join(intField(1, 742), pctField(12, 742.0/105000*100), pctField(13, 0), pctField(14, 742.0/125000*100), intField(9, 0), intField(11, limit))
+		q, err := ParseUsage(planFixture(false), usageFixture(p), sampleNow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		api := q.Pools[1]
+		if api.LimitEstimated || *api.UsedCents != 0 || *api.LimitCents != int64(limit) {
+			t.Fatal("explicit server amounts were overridden")
+		}
+		if limit == 50000 && q.Pools[0].LimitCents != nil {
+			t.Fatal("conflicting server limit did not prevent inference")
+		}
+	}
+}
+
+func TestClientEstimatesUnusedPoolWithoutEventRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/proto")
+		switch r.URL.Path {
+		case "/GetPlanInfo":
+			w.Write(planFixture(false))
+		case "/GetCurrentPeriodUsage":
+			w.Write(usageFixture(join(intField(1, 742), pctField(12, 742.0/105000*100), pctField(13, 0), pctField(14, 742.0/125000*100))))
+		default:
+			t.Error("usage events requested despite a complete snapshot")
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+	q, err := (Client{HTTP: server.Client(), endpoint: server.URL + "/"}).Fetch(context.Background(), "synthetic-test-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Pools) != 2 || q.Pools[1].UsedCents == nil || q.Pools[1].LimitCents == nil || *q.Pools[1].UsedCents != 0 || *q.Pools[1].LimitCents != 20000 {
+		t.Fatal("unused other-model pool has no total amount")
 	}
 }
 

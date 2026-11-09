@@ -15,11 +15,13 @@
 
 ## 接口口径
 
-依据 2026-10-21 安装的 Cursor 3.26.13 桌面协议：Connect unary POST，裸 protobuf，空请求体。读取 `GetPlanInfo`、`GetCurrentPeriodUsage`，非合并套餐另读 `GetAggregatedUsageEvents`（空请求体即当前账期）；合并套餐另读 `GetClientVisibleCreditGrants`。这些是桌面内部接口，没有稳定的兼容承诺。
+依据 Cursor 桌面协议（2026-11-09 核对本机 3.29.9）：Connect unary POST，裸 protobuf，空请求体。读取 `GetPlanInfo`、`GetCurrentPeriodUsage`，非合并套餐在无法从本次响应补齐金额时另读 `GetAggregatedUsageEvents`（空请求体即当前账期）；合并套餐另读 `GetClientVisibleCreditGrants`。这些是桌面内部接口，没有稳定的兼容承诺。
 
 `plan_usage` 按官方用量页口径显示 Cursor 模型（`autoPercentUsed`）与其他模型（`apiPercentUsed`）两个百分比，不设总池：`totalPercentUsed` 与 `totalSpend` 含服务商赠送的免费超额（`bonusSpend`），不展示；合并套餐只显示共享百分比。
 
-金额口径：已花为本账期用量事件 `totalCents` 按池汇总（tier 2 或 composer / cursor-grok 开头的模型计入 Cursor 模型，tier 1 计入其他模型，Bot / sand 用量不计入），总额为已花 ÷ 服务端百分比、取整到 10 美元，界面标注“估算”。百分比为 0、达到 99.5% 或无已花时不反推，只沿用本次运行中同一账号上次的估算，不持久化；`includedSpend` / `limit` 只是付费包含额度（用尽后的用量记为赠送的 `bonusSpend`），不作为任何池的上限。额外消费与 credit grants 单列，不能相加为订阅剩余额度。百分比与重置时间只用服务端值，估算总额不参与百分比计算；缺少百分比或用量时不补出 100% 可用额度。金额按整数 cents 保存，只有月度周期借用账单截止日，未指定周期不推算重置日，周额度不使用月账单截止日期。主面板显示数据时间，失败后保留的旧数据明确标记，状态栏与悬浮窗不展示旧百分比。
+金额口径：优先保留服务端直接返回的分池金额。未返回金额时，利用同一响应的 `totalSpend`、`totalPercentUsed`、`autoPercentUsed` 与 `apiPercentUsed` 估算：两池额度之和为总消费 ÷ 总已用比例，Cursor 池占总额度的比例为 `(totalPercentUsed - apiPercentUsed) / (autoPercentUsed - apiPercentUsed)`，再按各池百分比换算已花。这能在其中一池消费为 0 时补齐该池金额，并避免用量明细与百分比请求之间的时间差。两池百分比相同、总消费为 0、任一百分比达到 99.5%、总比例不在两池比例之间，或结果与明确返回的金额矛盾时不使用此估算。
+
+无法由本次响应估算时，回退为本账期用量事件 `totalCents` 按池汇总（tier 2 或 composer / cursor-grok 开头的模型计入 Cursor 模型，tier 1 计入其他模型，Bot / sand 用量不计入），总额为已花 ÷ 服务端百分比。两种方式的总额都取整到 10 美元，界面标注“估算”，不硬编码套餐额度。单池百分比为 0、达到 99.5% 或无已花时不从事件反推，只沿用本次运行中同一账号上次的估算，不持久化；整个账期尚无消费且无服务端金额时无法确定总额。`includedSpend` / `limit` 只是付费包含额度（用尽后的用量记为赠送的 `bonusSpend`），不作为任何池的上限。额外消费与 credit grants 单列，不能相加为订阅剩余额度。百分比与重置时间只用服务端值，估算总额不参与百分比计算；缺少百分比或用量时不补出 100% 可用额度。金额按整数 cents 保存，只有月度周期借用账单截止日，未指定周期不推算重置日，周额度不使用月账单截止日期。主面板显示数据时间，失败后保留的旧数据明确标记，状态栏与悬浮窗不展示旧百分比。
 
 后台请求最短间隔 5 分钟；用量事件请求失败（鉴权与限流除外）只跳过金额估算，不影响百分比；读取登录偶发失败或请求超时保留旧数据并标记，不清除 `Retry-After` 与最短间隔；手动刷新可以提前，但必须遵守服务端 `Retry-After`。请求完成后重新读取登录指纹（按账号邮箱，token 正常轮换不算切号），外部切号、退出或关闭开关后丢弃旧响应；Cursor 以外的刷新操作不强制请求 Cursor。未开启监控时不读取凭据；隐藏且其他展示位置未使用 Cursor 时不轮询。
 

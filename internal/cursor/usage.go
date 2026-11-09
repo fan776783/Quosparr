@@ -1,13 +1,16 @@
 package cursor
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // Pool contains only a server-reported usage pool, not inferred subscription prices.
 type Pool struct {
 	Kind                  string
 	UsedPercent           *float64
 	UsedCents, LimitCents *int64
-	// LimitEstimated marks a cap inferred from spend and percentage.
+	// LimitEstimated marks amounts inferred from spend and percentages.
 	LimitEstimated bool
 	ResetsAt       time.Time
 	WindowMinutes  int
@@ -134,8 +137,8 @@ func parseUsagePools(usage message, plan planInfo) ([]Pool, error) {
 
 // parseBuckets reads the percentages the usage page shows. A merged plan has
 // one shared pool; otherwise "auto" (Cursor models) and "api" (other models)
-// are separate and there is no total pool: totalPercentUsed and totalSpend
-// include free bonus usage and are not shown.
+// are separate. The combined percentage is used only to estimate amounts,
+// never as an additional pool or as the paid included-spend limit.
 func parseBuckets(p message, shared bool) ([]Pool, error) {
 	if shared {
 		pct, err := p.percent(14)
@@ -157,7 +160,59 @@ func parseBuckets(p message, shared bool) ([]Pool, error) {
 			pools = append(pools, *pool)
 		}
 	}
-	return pools, nil
+	return pools, estimateBucketAmounts(p, pools)
+}
+
+// The combined percentage is weighted by the two pools' caps. Together with
+// total spend it yields both caps, even when one pool has no usage events:
+// totalCap = totalSpend / totalPercent, and
+// autoCap / totalCap = (totalPercent - apiPercent) / (autoPercent - apiPercent).
+// This uses one server snapshot, avoiding event/percentage timing differences.
+// Equal percentages, capped percentages and an entirely unused cycle cannot
+// determine the split. Explicit server amounts always take precedence.
+func estimateBucketAmounts(m message, pools []Pool) error {
+	if len(pools) != 2 || pools[0].UsedPercent == nil || pools[1].UsedPercent == nil {
+		return nil
+	}
+	total, err := m.integer(1)
+	if err != nil {
+		return err
+	}
+	pct, err := m.percent(14)
+	if err != nil {
+		return err
+	}
+	if total == nil || *total <= 0 || pct == nil || *pct <= 0 || *pct >= maxInvertPercent {
+		return nil
+	}
+	auto, api := *pools[0].UsedPercent, *pools[1].UsedPercent
+	if auto >= maxInvertPercent || api >= maxInvertPercent || *pct <= min(auto, api) || *pct >= max(auto, api) {
+		return nil
+	}
+	totalCap := float64(*total) / *pct * 100
+	autoCap := totalCap * (*pct - api) / (auto - api)
+	caps := [2]float64{autoCap, totalCap - autoCap}
+	var used, limits [2]int64
+	for i, cap := range caps {
+		limit := math.Round(cap/1000) * 1000 // Match the existing $10 estimate precision.
+		spend := math.Round(cap * *pools[i].UsedPercent / 100)
+		if math.IsNaN(limit) || math.IsInf(limit, 0) || limit <= 0 || limit >= float64(math.MaxInt64) ||
+			math.IsNaN(spend) || math.IsInf(spend, 0) || spend < 0 || spend >= float64(math.MaxInt64) {
+			return nil
+		}
+		used[i], limits[i] = int64(spend), int64(limit)
+		// Conflicting explicit amounts mean the weighted split is not usable.
+		if p := pools[i]; p.LimitCents != nil && *p.LimitCents != limits[i] || p.UsedCents != nil && *p.UsedCents != used[i] {
+			return nil
+		}
+	}
+	for i := range pools {
+		p := &pools[i]
+		if p.UsedCents == nil && p.LimitCents == nil {
+			p.UsedCents, p.LimitCents, p.LimitEstimated = &used[i], &limits[i], true
+		}
+	}
+	return nil
 }
 
 func parseAdditionalSpend(usage message) (*int64, error) {

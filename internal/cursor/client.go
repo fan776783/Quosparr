@@ -57,9 +57,13 @@ func (c Client) Fetch(ctx context.Context, token string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if !out.Shared && len(out.Pools) > 0 {
-		// Spend only feeds the estimated amounts; the server percentages stand
-		// without it. Authentication and rate limits still apply to the fetch.
+	needsSpend := false
+	for _, pool := range out.Pools {
+		needsSpend = needsSpend || pool.UsedCents == nil && pool.LimitCents == nil
+	}
+	if !out.Shared && needsSpend {
+		// Aggregated spend is a fallback for estimated amounts; the server
+		// percentages stand without it. Authentication and rate limits apply.
 		body, err := c.request(ctx, &noRedirect, base, "GetAggregatedUsageEvents", token)
 		var limited *RateLimitedError
 		if errors.Is(err, ErrUnauthorized) || errors.As(err, &limited) || ctx.Err() != nil {
