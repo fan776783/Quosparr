@@ -76,6 +76,19 @@ func (s *Service) NextDueQuotaReset(after, now time.Time) time.Time {
 }
 
 func (s *Service) nextDueResetLocked(after, now time.Time) time.Time {
+	if s.prefs.SelectedProvider == store.ProviderCopilot {
+		if s.opts.Copilot == nil || !s.prefs.CopilotMonitoringEnabled {
+			return time.Time{}
+		}
+		var due time.Time
+		for _, m := range s.opts.Copilot.State(now).LiveMeters() {
+			r := m.ResetsAt
+			if r.After(after) && now.Sub(r) >= time.Second && (due.IsZero() || r.Before(due)) {
+				due = r
+			}
+		}
+		return due
+	}
 	if s.prefs.SelectedProvider == store.ProviderCursor {
 		if s.opts.Cursor == nil || !s.prefs.CursorMonitoringEnabled {
 			return time.Time{}

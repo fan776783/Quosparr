@@ -34,8 +34,10 @@ type PanelActions struct {
 	SelectProvider func(store.Provider)
 
 	// Fork-only action kept separate from upstream controls.
-	SetCursorMonitoring func(bool)
-	AuthorizeCursor     func()
+	SetCopilotMonitoring func(bool)
+	AuthorizeCopilot     func()
+	SetCursorMonitoring  func(bool)
+	AuthorizeCursor      func()
 	// PanelShown reports the panel opening and closing; the panel provider's
 	// local data loads only while it shows.
 	PanelShown    func(open bool)

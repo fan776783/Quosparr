@@ -79,9 +79,10 @@ type StatusInputs struct {
 	// Grok side; the zero state reads as loading.
 	Grok GrokState
 	// Claude side. The preferred status window is 5 hours, then 7 days.
-	Claude ClaudeState
-	Cursor CursorState
-	Now    time.Time
+	Claude  ClaudeState
+	Copilot CopilotState
+	Cursor  CursorState
+	Now     time.Time
 }
 
 // GrokStatusText is the status text of Grok: the countdown of the first
@@ -107,6 +108,8 @@ func GrokStatusText(lc l10n.Localizer, g GrokState, now time.Time) string {
 
 func statusTextFor(lc l10n.Localizer, in StatusInputs, p store.Provider) string {
 	switch p {
+	case store.ProviderCopilot:
+		return CopilotStatusText(lc, in.Copilot)
 	case store.ProviderCursor:
 		return CursorStatusText(lc, in.Cursor)
 	case store.ProviderGrok:
@@ -147,6 +150,8 @@ func ClaudeStatusText(lc l10n.Localizer, g ClaudeState, now time.Time) string {
 
 func metersOf(in StatusInputs, p store.Provider) []Meter {
 	switch p {
+	case store.ProviderCopilot:
+		return in.Copilot.LiveMeters()
 	case store.ProviderCursor:
 		return in.Cursor.LiveMeters()
 	case store.ProviderGrok:
@@ -160,7 +165,7 @@ func metersOf(in StatusInputs, p store.Provider) []Meter {
 
 func preferredOf(p store.Provider) []int {
 	switch p {
-	case store.ProviderCursor:
+	case store.ProviderCopilot, store.ProviderCursor:
 		return nil
 	case store.ProviderGrok:
 		return grokPreferredWindows
@@ -173,6 +178,8 @@ func preferredOf(p store.Provider) []int {
 
 func providerStatusKey(p store.Provider) l10n.Key {
 	switch p {
+	case store.ProviderCopilot:
+		return l10n.KeyProviderCopilot
 	case store.ProviderCursor:
 		return l10n.KeyProviderCursor
 	case store.ProviderGrok:

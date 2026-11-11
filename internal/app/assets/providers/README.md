@@ -11,3 +11,5 @@ The official [npm archive](https://registry.npmjs.org/@lobehub/icons-static-svg/
 Interface glyphs in `internal/app/glyphs_gen.go` come from [Remix Icon](https://remixicon.com), npm `remixicon` **4.9.1**, whose included `License` file is **Remix Icon License v1.0 (January 2026)**, preserved in `REMIXICON-LICENSE`; the npm metadata still labels this version Apache-2.0, but the included license file governs this attribution
 
 Regenerate both sets from the repository root with `go run ./Scripts/gen-glyphs`; only generation downloads the pinned official packages, app builds use local embedded assets
+
+`copilot.svg` uses the existing Remix Icon GitHub glyph from `website/icons/github-fill.svg`, under `REMIXICON-LICENSE`.

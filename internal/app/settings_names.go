@@ -10,6 +10,8 @@ import (
 
 func providerKey(v store.Provider) l10n.Key {
 	switch v {
+	case store.ProviderCopilot:
+		return l10n.KeyProviderCopilot
 	case store.ProviderCursor:
 		return l10n.KeyProviderCursor
 	case store.ProviderGrok:

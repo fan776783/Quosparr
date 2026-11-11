@@ -35,6 +35,9 @@ func renderAccountsPage(c *ui.Context, u *settingsUI) {
 		ui.Text(c, l.Text(l10n.KeyNotLoaded)).FontSize(12).TextColor(c.Theme().TextMuted)
 		return
 	}
+	if renderCopilotAccountsPage(c, u, f, rt) {
+		return
+	}
 	if renderCursorAccountsPage(c, u, f, rt) {
 		return
 	}

@@ -181,6 +181,7 @@ type liveApp struct {
 	claudeDesktop  *claudedesktop.Manager
 	desktopSharer  codexdesktop.Sharer
 	claudeB        *claudeBridge
+	copilotB       *copilotBridge
 	cursorB        *cursorBridge
 	codexCache     usage.CacheScanCache
 	grokCache      grok.CacheScanCache
@@ -240,6 +241,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		log.Println("claude accounts: load failed")
 	}
 	cbridge.reload(false)
+	copilotB := newCopilotBridge(home, prefs, langs)
 	cursorB := newCursorBridge(home, prefs, langs)
 	reset := newResetBridge(opts.Settings, prefs, langs)
 	repo := openUsage(home, priceSource)
@@ -279,6 +281,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		StatusPath:          export.DefaultStatusPath(home),
 		Grok:                bridge,
 		Claude:              cbridge,
+		Copilot:             copilotB,
 		Cursor:              cursorB,
 		ResetToday:          reset,
 		WidgetRequirements:  widgetRequirements,
@@ -296,6 +299,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		host: opts.Host, pricing: prices, svc: svc, codex: codexStore, grokMod: mod, grok: bridge, claudeMod: cmod, claudeB: cbridge, reset: reset,
 		repo: repo, widgets: widgets, dispatch: dispatch, widgetDispatch: widgetUI, alertDispatch: alertUI, version: opts.Version, langs: langs,
 	}
+	rt.copilotB = copilotB
 	rt.cursorB = cursorB
 	rt.claudeDesktop = newClaudeDesktopManager(home, cmod)
 	rt.desktopSharer = desktopSharer
@@ -338,6 +342,9 @@ func (rt *liveApp) stop() {
 		rt.pricing.close()
 	}
 	rt.closePreferences()
+	if rt.copilotB != nil {
+		rt.copilotB.close()
+	}
 	if rt.cursorB != nil {
 		rt.cursorB.close()
 	}
@@ -355,9 +362,15 @@ func (rt *liveApp) pushPreferences(s *Settings) {
 func (rt *liveApp) panelActions(s *Settings) PanelActions {
 	svc := rt.svc
 	actions := PanelActions{
-		PricingVersion: rt.pricingVersion,
-		Refresh:        func() { rt.requestRefresh(s, "") },
-		RefreshSection: func(sec runway.Section) { rt.requestRefresh(s, sec) },
+		PricingVersion:   rt.pricingVersion,
+		Refresh:          func() { rt.requestRefresh(s, "") },
+		RefreshSection:   func(sec runway.Section) { rt.requestRefresh(s, sec) },
+		AuthorizeCopilot: func() { svc.AuthorizeCopilot() },
+		SetCopilotMonitoring: func(on bool) {
+			if s != nil {
+				s.SetCopilotMonitoringEnabled(on)
+			}
+		},
 		AuthorizeCursor: func() {
 			rt.requestCursorAuthorization(s)
 		},
@@ -421,6 +434,12 @@ func (rt *liveApp) panelActions(s *Settings) PanelActions {
 }
 
 func refreshSection(s *runway.Service, sec runway.Section) {
+	if s.Preferences().SelectedProvider == store.ProviderCopilot {
+		if sec == runway.SectionQuota {
+			s.RefreshCopilot(true)
+		}
+		return
+	}
 	if s.Preferences().SelectedProvider == store.ProviderCursor {
 		if sec == runway.SectionQuota {
 			s.RefreshCursor(true)

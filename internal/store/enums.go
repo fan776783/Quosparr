@@ -19,7 +19,9 @@ const (
 func Providers() []Provider { return []Provider{ProviderCodex, ProviderClaude, ProviderGrok} }
 
 // Valid reports whether v is a known value.
-func (v Provider) Valid() bool { return v == ProviderCursor || slices.Contains(Providers(), v) }
+func (v Provider) Valid() bool {
+	return v == ProviderCopilot || v == ProviderCursor || slices.Contains(Providers(), v)
+}
 
 // Language is the user's language preference.
 type Language string

@@ -44,6 +44,7 @@ type Options struct {
 	// Grok, Claude, Cursor and ResetToday are optional providers.
 	Grok       GrokProvider
 	Claude     ClaudeProvider
+	Copilot    CopilotProvider
 	Cursor     CursorProvider
 	ResetToday ResetTodayProvider
 
@@ -243,6 +244,9 @@ func New(o Options) *Service {
 	}
 	if o.Claude != nil {
 		o.Claude.SetOnChange(s.publish)
+	}
+	if o.Copilot != nil {
+		o.Copilot.SetOnChange(s.publish)
 	}
 	if o.Cursor != nil {
 		o.Cursor.SetOnChange(s.publish)
@@ -468,12 +472,14 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	old := s.prefs
 	hadGrok := s.quotaWantedLocked(store.ProviderGrok)
 	hadClaude := s.quotaWantedLocked(store.ProviderClaude)
+	hadCopilot := s.quotaWantedLocked(store.ProviderCopilot)
 	hadCursor := s.quotaWantedLocked(store.ProviderCursor)
 	s.prefs = p.Clone()
 	s.lc = s.localizer()
 	// A provider shown again fetches its quota now instead of at the next tick.
 	grokBack := !hadGrok && s.quotaWantedLocked(store.ProviderGrok)
 	claudeBack := !hadClaude && s.quotaWantedLocked(store.ProviderClaude)
+	copilotBack := !hadCopilot && s.quotaWantedLocked(store.ProviderCopilot)
 	cursorBack := !hadCursor && s.quotaWantedLocked(store.ProviderCursor)
 	now := s.now()
 	s.refreshIntervalChangedLocked(now)
@@ -506,6 +512,9 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	}
 	if claudeBack {
 		s.refreshClaude(false)
+	}
+	if copilotBack || p.CopilotMonitoringEnabled && (old.CopilotSource != p.CopilotSource || old.CopilotAccountID != p.CopilotAccountID) {
+		s.RefreshCopilot(false)
 	}
 	if cursorBack {
 		s.RefreshCursor(false)

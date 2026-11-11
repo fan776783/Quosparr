@@ -17,6 +17,9 @@ var codexMonoProviderSVG []byte
 //go:embed assets/providers/claude.svg
 var claudeMonoProviderSVG []byte
 
+//go:embed assets/providers/copilot.svg
+var copilotProviderSVG []byte
+
 //go:embed assets/providers/cursor.svg
 var cursorProviderSVG []byte
 
@@ -27,10 +30,11 @@ var grokProviderSVG []byte
 var claudeProviderSVG []byte
 
 var (
-	cursorProviderIcon = ui.MustParseSVG(cursorProviderSVG)
-	codexProviderIcon  = ui.MustParseSVG(codexProviderSVG)
-	grokProviderIcon   = ui.MustParseSVG(grokProviderSVG)
-	claudeProviderIcon = ui.MustParseSVG(claudeProviderSVG)
+	copilotProviderIcon = ui.MustParseSVG(copilotProviderSVG)
+	cursorProviderIcon  = ui.MustParseSVG(cursorProviderSVG)
+	codexProviderIcon   = ui.MustParseSVG(codexProviderSVG)
+	grokProviderIcon    = ui.MustParseSVG(grokProviderSVG)
+	claudeProviderIcon  = ui.MustParseSVG(claudeProviderSVG)
 
 	codexMonoProviderIcon  = ui.MustParseSVG(codexMonoProviderSVG)
 	claudeMonoProviderIcon = ui.MustParseSVG(claudeMonoProviderSVG)
@@ -40,6 +44,8 @@ var (
 // the text color. Unknown providers use the interface's neutral plug icon.
 func ProviderIcon(c *ui.Context, provider store.Provider, size float32) ui.Element {
 	switch provider {
+	case store.ProviderCopilot:
+		return ui.Image(c, copilotProviderIcon).Size(size, size)
 	case store.ProviderCursor:
 		return ui.Image(c, cursorProviderIcon).Size(size, size)
 	case store.ProviderCodex:
@@ -56,6 +62,8 @@ func ProviderIcon(c *ui.Context, provider store.Provider, size float32) ui.Eleme
 // ProviderMonoIcon is the monochrome logo, drawn in the text color.
 func ProviderMonoIcon(c *ui.Context, provider store.Provider, size float32) ui.Element {
 	switch provider {
+	case store.ProviderCopilot:
+		return ui.Image(c, copilotProviderIcon).Size(size, size)
 	case store.ProviderCursor:
 		return ui.Image(c, cursorProviderIcon).Size(size, size)
 	case store.ProviderCodex:

@@ -494,6 +494,8 @@ func inset2(r ui.Rect, d float32) ui.Rect {
 // trayProviderIcon is the monochrome logo; the menu bar tints it.
 func trayProviderIcon(p store.Provider) *ui.SVG {
 	switch p {
+	case store.ProviderCopilot:
+		return copilotProviderIcon
 	case store.ProviderCursor:
 		return cursorProviderIcon
 	case store.ProviderCodex:

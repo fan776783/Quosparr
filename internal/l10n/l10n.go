@@ -64,12 +64,17 @@ func Lookup(lang Language, key Key) (string, bool) {
 	if s, ok := tables[lang][key]; ok {
 		return s, true
 	}
-	s, ok := cursorTables[lang][key]
+	if s, ok := cursorTables[lang][key]; ok {
+		return s, true
+	}
+	s, ok := copilotTables[lang][key]
 	return s, ok
 }
 
 // Keys returns every key in declaration order.
-func Keys() []Key { return append(append([]Key(nil), allKeys...), cursorKeys...) }
+func Keys() []Key {
+	return append(append(append([]Key(nil), allKeys...), cursorKeys...), copilotKeys...)
+}
 
 // MissingTranslations lists keys that lang does not translate (absent or
 // blank), matching the Swift L10n.missingTranslations.

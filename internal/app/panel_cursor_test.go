@@ -103,7 +103,7 @@ func TestCursorPanelFourTabsFitAndUsageLinkWorks(t *testing.T) {
 }
 
 func TestCursorDoesNotEnterCLIManagementTabs(t *testing.T) {
-	if len(store.DisplayProviders()) != len(store.Providers())+1 || skillsTrashTab != len(store.Providers()) {
+	if len(store.DisplayProviders()) != len(store.Providers())+2 || skillsTrashTab != len(store.Providers()) {
 		t.Fatal("management providers conflict with trash")
 	}
 	for _, p := range store.Providers() {

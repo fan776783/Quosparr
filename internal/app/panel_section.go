@@ -22,6 +22,11 @@ func sectionBlock(c *ui.Context, first *bool, body func()) {
 
 // panelBody follows the saved module order and provider support.
 func panelBody(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap runway.Snapshot, acts PanelActions, state *panelState) {
+	if prefs.SelectedProvider == store.ProviderCopilot {
+		first := true
+		panelCopilotQuota(c, l, prefs, snap.Copilot, acts, &first, state)
+		return
+	}
 	if prefs.SelectedProvider == store.ProviderCursor {
 		first := true
 		panelCursorQuota(c, l, prefs, snap.Cursor, acts, &first, state)
@@ -126,6 +131,8 @@ func sectionRefreshing(snap runway.Snapshot, section runway.Section) bool {
 		return true
 	}
 	switch snap.Provider {
+	case store.ProviderCopilot:
+		return snap.Copilot.Refreshing
 	case store.ProviderCursor:
 		return snap.Cursor.Refreshing
 	case store.ProviderGrok:

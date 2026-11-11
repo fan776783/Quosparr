@@ -13,7 +13,7 @@ func TestCursorIsDisplayOnlyAndNotAnUpstreamAccountProvider(t *testing.T) {
 	if len(base) == 0 || slices.Contains(base, store.ProviderCursor) {
 		t.Fatal("Cursor leaked into upstream provider catalog")
 	}
-	if !slices.Equal(store.DisplayProviders(), append(slices.Clone(base), store.ProviderCursor)) {
+	if !slices.Equal(store.DisplayProviders(), append(slices.Clone(base), store.ProviderCursor, store.ProviderCopilot)) {
 		t.Fatal("Cursor display provider missing")
 	}
 	e := newEnv(t, nil)

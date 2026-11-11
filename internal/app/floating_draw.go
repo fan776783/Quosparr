@@ -75,6 +75,8 @@ func percentText(m runway.FloatingMeter) string {
 
 func floatingProviderIcon(p *ui.Painter, prov store.Provider, r ui.Rect, k floatingInk) {
 	switch prov {
+	case store.ProviderCopilot:
+		p.Icon(copilotProviderIcon, r, k.text)
 	case store.ProviderCursor:
 		p.Icon(cursorProviderIcon, r, k.text)
 	case store.ProviderCodex:

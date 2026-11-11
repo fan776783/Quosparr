@@ -89,6 +89,7 @@ func readPreferences(r *reader) Preferences {
 	p.ShowsCreditsBalance = r.bool("showsCreditsBalance", p.ShowsCreditsBalance)
 	p.ShowsSkills = r.bool("showsSkills", p.ShowsSkills)
 	p.CursorPreferences = readCursorPreferences(r)
+	p.CopilotPreferences = readCopilotPreferences(r)
 	p.FloatingWindow = readFloatingWindow(r, "floatingWindow")
 	p.StatusBar = readStatusBarLayout(r, "statusBarLayout")
 	p.PanelProviders = readPanelProviders(r, "panelProviders")

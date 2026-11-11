@@ -34,6 +34,9 @@ func (s *Service) buildLocked(now time.Time) Snapshot {
 	if s.opts.Claude != nil {
 		snap.Claude = s.opts.Claude.State(now)
 	}
+	if s.opts.Copilot != nil {
+		snap.Copilot = s.opts.Copilot.State(now)
+	}
 	if s.opts.Cursor != nil {
 		snap.Cursor = s.opts.Cursor.State(now)
 	}
@@ -43,7 +46,7 @@ func (s *Service) buildLocked(now time.Time) Snapshot {
 	in := StatusInputs{
 		Prefs: s.prefs, Provider: s.prefs.SelectedProvider,
 		CodexText: snap.Codex.StatusText, CodexMeters: snap.Codex.Meters,
-		Grok: snap.Grok, Claude: snap.Claude, Cursor: snap.Cursor, Now: now,
+		Grok: snap.Grok, Claude: snap.Claude, Cursor: snap.Cursor, Copilot: snap.Copilot, Now: now,
 	}
 	snap.StatusBar = BuildStatusBar(lc, in)
 	if s.prefs.FloatingWindow.Enabled {
