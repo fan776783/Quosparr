@@ -1,0 +1,29 @@
+name: Fork Checks
+
+on:
+  push:
+    branches: [main, v1]
+    paths-ignore:
+      - website/**
+      - .github/workflows/website.yml
+  pull_request:
+    paths-ignore:
+      - website/**
+      - .github/workflows/website.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fork-checks:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-go
+      - name: Verify fork integration and release helpers
+        run: bash Scripts/check-fork.sh

@@ -29,8 +29,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-go
-      - name: Verify Go and release helpers
-        run: bash Scripts/check-go-release.sh
+      - name: Vet and race tests without desktop interaction
+        run: |
+          go vet ./...
+          go test -race -count=1 ./...
+          go test -tags=quosparr_dev_package -count=1 ./internal/app -run '^TestPackagedDevelopmentUpdate'
+      - name: Check release helpers
+        run: |
+          python3 Scripts/Tests/test-v1-release.py
+          python3 Scripts/Tests/test-v1-homebrew.py
+          python3 Scripts/Tests/test-v1-platform.py
+          python3 Scripts/Tests/test-workflow-drafts.py
 
   go-native-tests:
     needs: go-checks

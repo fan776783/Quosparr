@@ -72,6 +72,7 @@ func WithShortTitle(lc l10n.Localizer, m Meter) Meter {
 
 // StatusInputs is everything the status item selection reads.
 type StatusInputs struct {
+	ForkSnapshot
 	Prefs    store.Preferences
 	Provider store.Provider
 	// Codex side.
@@ -80,9 +81,7 @@ type StatusInputs struct {
 	// Grok side; the zero state reads as loading.
 	Grok GrokState
 	// Claude side. The preferred status window is 5 hours, then 7 days.
-	Claude  ClaudeState
-	Copilot CopilotState
-	Cursor  CursorState
+	Claude ClaudeState
 	// Gemini side. The preferred status window is the Gemini 5 hours, then
 	// its week; the other model families are model-specific meters.
 	Gemini GeminiState

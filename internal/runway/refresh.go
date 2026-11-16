@@ -527,12 +527,11 @@ func (s *Service) startFull(policy usage.RefreshPolicy, widgets bool) <-chan str
 	ok := s.spawn(func() {
 		defer close(done)
 		s.mu.Lock()
+		forkQuota := s.forkQuotaWantedLocked()
 		showsGrok := s.showsProviderLocked(store.ProviderGrok)
 		showsClaude := s.showsProviderLocked(store.ProviderClaude)
 		wantsGrok := s.quotaWantedLocked(store.ProviderGrok)
 		wantsClaude := s.quotaWantedLocked(store.ProviderClaude)
-		wantsCopilot := s.quotaWantedLocked(store.ProviderCopilot)
-		wantsCursor := s.quotaWantedLocked(store.ProviderCursor)
 		showsGemini := s.showsProviderLocked(store.ProviderGemini)
 		wantsGemini := s.quotaWantedLocked(store.ProviderGemini)
 		// Local data is the open panel's provider only, or every provider
@@ -571,13 +570,6 @@ func (s *Service) startFull(policy usage.RefreshPolicy, widgets bool) <-chan str
 				report(c.RefreshLocal(ctx), showsClaude)
 			}
 		}
-		if c := s.opts.Copilot; c != nil && wantsCopilot {
-			_ = c.Refresh(ctx, false)
-		}
-		// Only Cursor's own manual refresh may skip its minimum interval.
-		if c := s.opts.Cursor; c != nil && wantsCursor {
-			_ = c.Refresh(ctx, false)
-		}
 		if g := s.opts.Gemini; g != nil {
 			if wantsGemini {
 				report(g.Refresh(ctx, policy == usage.RefreshForce), showsGemini)
@@ -586,6 +578,7 @@ func (s *Service) startFull(policy usage.RefreshPolicy, widgets bool) <-chan str
 				report(g.RefreshLocal(ctx), showsGemini)
 			}
 		}
+		s.refreshForkQuota(ctx, forkQuota)
 		s.refreshNow(ctx, policy, local)
 		cancel()
 		s.finishFull(id)
@@ -1057,10 +1050,10 @@ func (s *Service) RefreshQuota() <-chan struct{} {
 	if wantsClaude {
 		s.refreshClaude(true)
 	}
-	s.RefreshCursor(false)
 	if wantsGemini {
 		s.refreshGemini(true)
 	}
+	s.refreshForkQuotaSection()
 	return s.runAccountScoped(s.refreshQuotaNow)
 }
 

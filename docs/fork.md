@@ -7,7 +7,7 @@
 - Cursor 额度监控：`internal/cursor`、相关 UI / 偏好 / 文案与 `docs/cursor-monitoring.md`
 - 更新源：`mygo.json` 的 `updates.github` 为 `fan776783/Quosparr`，`updates.publicKey` 为 fork 自有公钥；`internal/app/update.go` 的 Releases 链接同步指向 fork
 - 版本号：`<上游版本>-cursor.<序号>`，如上游 `1.7.3` 对应 `1.7.3-cursor.1`，同一上游版本上的后续发布递增序号
-- 发布：Fork Sync 发布 macOS arm64 与 Windows x64 正式包到同一个 fork Release；`Scripts/fork-release.sh` 保留本机 macOS 发布入口（设为 latest）；fork 仓库停用了 `Release Draft` 与 `Website` workflow，CI 保留
+- 发布：Fork Sync 发布 macOS arm64 与 Windows x64 正式包到同一个 fork Release；`Scripts/fork-release.sh` 保留本机 macOS 发布入口（设为 latest）；fork 仓库停用了 `Release Draft` 与 `Website` workflow，CI 保留，另有 Fork Checks 执行 fork 专项检查
 
 ## 自动同步
 
@@ -15,7 +15,7 @@
 
 - `Scripts/fork-merge.sh` 先合并但不提交，叠加 fork 配置后再生成一个合并提交；只有 `mygo.json` 冲突时自动解决：保留上游其他字段，写回 fork 的公钥与仓库；上游升版时版本号改为 `<上游版本>-cursor.1`，上游预发布版本不自动同步
 - 其他冲突、测试失败，或上游改动了 `.github/workflows`（`GITHUB_TOKEN` 无权推送 workflow 文件，构建前检查）时不推送，运行失败并在摘要中列出原因，需按下方步骤手动同步
-- 有新合并或待发布版本时，必须运行与 CI 共用的 `Scripts/check-go-release.sh`：`go vet`、race 测试、开发包测试、六平台交叉编译及全部发布辅助检查；检查通过后才推送和发布。没有新合并也不能跳过待发布版本的检查，检查失败不发布
+- 有新合并或待发布版本时，必须运行完整发布前检查 `Scripts/check-go-release.sh`：`go vet`、race 测试、开发包测试、六平台交叉编译及全部发布辅助检查；检查通过后才推送和发布。没有新合并也不能跳过待发布版本的检查，检查失败不发布
 - `mygo.json` 的版本尚无对应 Release 时，在 macOS runner 上用 `FORK_UPDATE_PRIVATE_KEY` Secret 打包签名并发布 arm64 版本，已安装的 fork 版本随后经应用内更新升级；写权限仅授予限定本 fork 的同步 job，签名私钥临时文件在退出时清理
 - fork 的 `-cursor.N` 版本始终使用自己的 stable 更新源与公钥。macOS 发布通过 `FORK_ADHOC_PACKAGE=1` 保留现有 ad-hoc 应用签名，不做 Apple 公证；更新归档仍使用 fork 私钥签名。该模式只接受 fork 版本及更新仓库，上游正式发布继续要求 Developer ID 签名和公证，首次安装可能需要在系统设置中允许打开
 - 同步成功后，独立 Windows x64 job 检查同版本 Release：缺少全部 Windows 附件时，从该 Release 的标签检出源码，以同一 `FORK_UPDATE_PRIVATE_KEY` 构建正式包（更新器开启），通过归档验签及 Windows 原生安装、卸载、SQLite 检查后，追加 `Quosparr.Setup.<version>.amd64.exe`、`quosparr-<version>-windows-amd64.tar.gz` 和 `update-windows-amd64.json`；更新清单最后上传。macOS 发布后、Windows job 完成前，Release 暂时只有 macOS 包
@@ -48,7 +48,8 @@ bash Scripts/fork-release.sh
 ## 减少重复冲突
 
 - `AGENTS.md` 与所有 `README*.md` 完全跟随上游，不加入 fork 内容或入口提示；Cursor 的七语言功能、隐私和验收说明只保留在 fork 独有的 `docs/fork-cursor.md`。
-- Cursor 专有字段、初始化与测试条件独立成行，避免修改上游字段组及长条件表达式；新增逻辑优先放在现有 `cursor_*.go` 文件中。
+- Cursor / Copilot 的生命周期和界面动作放在 `internal/app/fork_runtime.go`，图标放在 `fork_icons.go`；共享运行时保留固定调用点。`internal/runway/fork_providers.go` 集中配置、快照、偏好刷新与重置调度，避免在上游供应商字段组和分支中逐项接线。
+- 上游 `ci.yml` 跟随上游；`fork-ci.yml` 通过 `Scripts/check-fork.sh` 运行六平台交叉编译和 `test-fork-*.py`。Fork Sync 的完整发布前检查继续覆盖共享 Go / 发布检查及 fork 专项检查。公共 workflow 测试排除 `fork-*.yml`，由 `test-fork-workflows.py` 单独验证其权限与发布门禁。
 - 不对 README、AGENTS.md 或业务代码配置全局 ours/theirs 策略；上游的新功能与 Cursor 功能必须同时保留。版本、更新仓库与公钥由配置叠加脚本明确维护。
 - `python3 Scripts/Tests/test-fork-merge.py` 使用临时 Git 仓库验证版本冲突、源码冲突回滚、配置保留与重复同步。
 
@@ -61,5 +62,5 @@ bash Scripts/fork-release.sh
 - 账号页只保留 `renderCursorAccountsPage` / `cursorAccountTabs` 接线，Cursor 页签位置由上游服务商数量计算；授权、读取与额度投影仍放在 `cursor_*.go`、`*_cursor.go` 或 `internal/cursor/` 中。
 - Cursor 基础文案放在 `internal/l10n/cursor_catalog.go`，授权文案放在 `cursor_authorization.go`；通过统一查询入口返回，不修改上游 `tables.go` / `allKeys` 的冻结集合。独立测试覆盖七语言、英文回退及扩展键完整性。
 - Cursor 专项测试使用独立的 `cursor_*_test.go`、`*_cursor_test.go` 或 `internal/cursor/` 文件。上游新增测试应能直接运行，不逐个改成“跳过 Cursor”；显示扩展与基础列表分别验证。
-- 当前必要的共享测试差异仅是 `internal/store/preferences_test.go` 的未知枚举样例：fork 已支持 `cursor`，因此改用仍未知的 `gemini`。这属于实际配置协议扩展，不能靠改运行时行为或跳过测试隐藏。
+- `internal/store/preferences_test.go` 的未知枚举样例使用 `future-provider`，因为 Cursor 和 Gemini 均已支持；面板配置测试保留 Cursor 选择并继续验证未知值被忽略。发布配置测试以输入配置为准验证更新仓库，fork 固定身份由专项测试锁定。这些是实际协议和配置差异，不能靠改运行时行为或跳过测试隐藏。
 - 同步前可用 `git diff origin/main -- '*_test.go'` 复核：新增专项文件不算上游测试侵入，共享文件上的额外差异需要逐项解释。隔离减少文本冲突，不保证上游接口或配置语义变更永远无需人工适配。

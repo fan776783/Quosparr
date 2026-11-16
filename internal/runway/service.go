@@ -31,6 +31,7 @@ const (
 
 // Options configures a Service.
 type Options struct {
+	ForkProviders
 	PricingVersion func() string
 	Sources        Sources
 	Preferences    store.Preferences
@@ -41,11 +42,10 @@ type Options struct {
 	CostCachePath       string // api-equivalent-cost.json
 	StatusPath          string // status.json (written when ExportsStatusJSON)
 
-	// Optional quota and reset providers.
+	// Grok, Claude, Gemini and ResetToday are optional providers (see
+	// providers.go).
 	Grok       GrokProvider
 	Claude     ClaudeProvider
-	Copilot    CopilotProvider
-	Cursor     CursorProvider
 	Gemini     GeminiProvider
 	ResetToday ResetTodayProvider
 
@@ -246,18 +246,13 @@ func New(o Options) *Service {
 	if o.Claude != nil {
 		o.Claude.SetOnChange(s.publish)
 	}
-	if o.Copilot != nil {
-		o.Copilot.SetOnChange(s.publish)
-	}
-	if o.Cursor != nil {
-		o.Cursor.SetOnChange(s.publish)
-	}
 	if o.Gemini != nil {
 		o.Gemini.SetOnChange(s.publish)
 	}
 	if o.ResetToday != nil {
 		o.ResetToday.SetOnChange(s.publish)
 	}
+	s.initForkProviders()
 	return s
 }
 
@@ -474,18 +469,16 @@ func (s *Service) Epoch() uint64 {
 func (s *Service) SetPreferences(p store.Preferences) {
 	s.mu.Lock()
 	old := s.prefs
+	forkBefore := s.forkQuotaWantedLocked()
 	hadGrok := s.quotaWantedLocked(store.ProviderGrok)
 	hadClaude := s.quotaWantedLocked(store.ProviderClaude)
-	hadCopilot := s.quotaWantedLocked(store.ProviderCopilot)
-	hadCursor := s.quotaWantedLocked(store.ProviderCursor)
 	hadGemini := s.quotaWantedLocked(store.ProviderGemini)
 	s.prefs = p.Clone()
+	forkAfter := s.forkQuotaWantedLocked()
 	s.lc = s.localizer()
 	// A provider shown again fetches its quota now instead of at the next tick.
 	grokBack := !hadGrok && s.quotaWantedLocked(store.ProviderGrok)
 	claudeBack := !hadClaude && s.quotaWantedLocked(store.ProviderClaude)
-	copilotBack := !hadCopilot && s.quotaWantedLocked(store.ProviderCopilot)
-	cursorBack := !hadCursor && s.quotaWantedLocked(store.ProviderCursor)
 	geminiBack := !hadGemini && s.quotaWantedLocked(store.ProviderGemini)
 	now := s.now()
 	s.refreshIntervalChangedLocked(now)
@@ -510,6 +503,7 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	}
 	s.publishLocked()
 	s.mu.Unlock()
+	s.refreshForkPreferences(old, p, forkBefore, forkAfter)
 	if switched {
 		s.refreshPanelLocal()
 	}
@@ -518,12 +512,6 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	}
 	if claudeBack {
 		s.refreshClaude(false)
-	}
-	if copilotBack || p.CopilotMonitoringEnabled && (old.CopilotSource != p.CopilotSource || old.CopilotAccountID != p.CopilotAccountID) {
-		s.RefreshCopilot(false)
-	}
-	if cursorBack {
-		s.RefreshCursor(false)
 	}
 	if geminiBack {
 		s.refreshGemini(false)

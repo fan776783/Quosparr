@@ -204,7 +204,7 @@ func TestCursorPermanentChoiceDoesNotRepeatAutomaticDenial(t *testing.T) {
 	var grants atomic.Int32
 	b.read = func(context.Context) (cursor.Auth, error) { return cursor.Auth{}, cursor.ErrAuthorizationRequired }
 	b.authorize = func(context.Context) error { grants.Add(1); return cursor.ErrAuthorizationDenied }
-	svc := runway.New(runway.Options{Preferences: p, Cursor: b})
+	svc := runway.New(runway.Options{Preferences: p, ForkProviders: runway.ForkProviders{Cursor: b}})
 	defer svc.Close()
 	rt := &liveApp{svc: svc, cursorB: b}
 	e.s.OnChange(func() {

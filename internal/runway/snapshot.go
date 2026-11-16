@@ -36,6 +36,7 @@ const (
 // are never modified afterwards, so a UI may keep and read it from any
 // goroutine. Pointers are nil when the datum is not available.
 type Snapshot struct {
+	ForkSnapshot
 	// Seq increases with every published snapshot.
 	Seq         uint64
 	GeneratedAt time.Time
@@ -47,8 +48,6 @@ type Snapshot struct {
 	Codex      CodexView
 	Grok       GrokState
 	Claude     ClaudeState
-	Copilot    CopilotState
-	Cursor     CursorState
 	Gemini     GeminiState
 	ResetToday ResetTodayState
 	Refresh    RefreshView

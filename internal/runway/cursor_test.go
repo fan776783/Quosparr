@@ -72,7 +72,7 @@ func TestCursorPanelDoesNotReadCodexLocalData(t *testing.T) {
 func TestCursorStatusAndFloatingKeepPoolNamesAndHideStaleMeters(t *testing.T) {
 	p := store.DefaultPreferences()
 	p.SelectedProvider = store.ProviderCursor
-	in := StatusInputs{Prefs: p, Provider: store.ProviderCursor, Cursor: CursorState{Availability: CursorReady, Meters: []Meter{{Title: "Auto pool", RemainingPercent: 75, UsedPercent: 25, PreserveTitle: true}}}}
+	in := StatusInputs{Prefs: p, Provider: store.ProviderCursor, ForkSnapshot: ForkSnapshot{Cursor: CursorState{Availability: CursorReady, Meters: []Meter{{Title: "Auto pool", RemainingPercent: 75, UsedPercent: 25, PreserveTitle: true}}}}}
 	v := BuildStatusBar(zh, in)
 	if len(v.Components) != 1 || v.Components[0].Provider != store.ProviderCursor || v.Components[0].Cells[0].Percent != "75%" {
 		t.Fatal("Cursor status fell through")
@@ -92,10 +92,10 @@ func TestCursorStatusBarPoolsSurviveGroupingAndWindowSelection(t *testing.T) {
 	p := store.DefaultPreferences()
 	p.SetStatusBarQuotaWindow(store.StatusBarWindowAuto)
 	p.SetStatusBarGroups([][]store.Provider{{store.ProviderCodex, store.ProviderClaude}, {store.ProviderCursor}, {store.ProviderGrok}})
-	in := StatusInputs{Prefs: p, Cursor: CursorState{Availability: CursorReady, Meters: []Meter{
+	in := StatusInputs{Prefs: p, ForkSnapshot: ForkSnapshot{Cursor: CursorState{Availability: CursorReady, Meters: []Meter{
 		{Title: "Cursor models", PreserveTitle: true, RemainingPercent: 75},
 		{Title: "Other models", PreserveTitle: true, RemainingPercent: 40},
-	}}}
+	}}}}
 	for _, style := range store.StatusBarStyles() {
 		in.Prefs.StatusBarDisplayStyle = style
 		v := BuildStatusBar(zh, in)

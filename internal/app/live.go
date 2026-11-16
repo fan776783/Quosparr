@@ -171,6 +171,7 @@ func netCredentials(c *ProxyCredentials) *netx.Credentials {
 func OpenFolder(path string) { openFolder(path) }
 
 type liveApp struct {
+	forkRuntime
 	pricing        *livePricing
 	host           *App
 	preferenceWork livePreferenceWork
@@ -182,8 +183,6 @@ type liveApp struct {
 	claudeDesktop  *claudedesktop.Manager
 	desktopSharer  codexdesktop.Sharer
 	claudeB        *claudeBridge
-	copilotB       *copilotBridge
-	cursorB        *cursorBridge
 	geminiMod      *gemini.Module
 	geminiB        *geminiBridge
 	codexCache     usage.CacheScanCache
@@ -222,6 +221,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 	if opts.Settings != nil {
 		prefs = opts.Settings.Prefs()
 	}
+	fork := newForkRuntime(home, prefs, langs)
 	prices := newLivePricing(home, prefs, opts.PricingFetch, opts.PricingNow)
 	priceSource := usage.SnapshotPrices(prices.manager.Snapshot)
 	codexStore := codex.NewStore(platform.CodexDir(home), platform.RunwayDir(home))
@@ -244,8 +244,6 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		log.Println("claude accounts: load failed")
 	}
 	cbridge.reload(false)
-	copilotB := newCopilotBridge(home, prefs, langs)
-	cursorB := newCursorBridge(home, prefs, langs)
 	// The first refresh follows the official login; startup reads no keychain.
 	gmod := newGeminiModule(home, opts.Version)
 	gbridge := newGeminiBridge(gmod, home, prefs, langs)
@@ -274,6 +272,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		}
 	}}
 	svc = runway.New(runway.Options{
+		ForkProviders:  fork.providers(),
 		PricingVersion: func() string { return priceSource.PriceBook(context.Background()).Version() },
 		Sources: runway.NewLiveSources(runway.LiveConfig{
 			LegacyStop:    prepareCodexDesktopRestart,
@@ -288,8 +287,6 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		StatusPath:          export.DefaultStatusPath(home),
 		Grok:                bridge,
 		Claude:              cbridge,
-		Copilot:             copilotB,
-		Cursor:              cursorB,
 		Gemini:              gbridge,
 		ResetToday:          reset,
 		WidgetRequirements:  widgetRequirements,
@@ -307,8 +304,6 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 		host: opts.Host, pricing: prices, svc: svc, codex: codexStore, grokMod: mod, grok: bridge, claudeMod: cmod, claudeB: cbridge, geminiMod: gmod, geminiB: gbridge, reset: reset,
 		repo: repo, widgets: widgets, dispatch: dispatch, widgetDispatch: widgetUI, alertDispatch: alertUI, version: opts.Version, langs: langs,
 	}
-	rt.copilotB = copilotB
-	rt.cursorB = cursorB
 	rt.claudeDesktop = newClaudeDesktopManager(home, cmod)
 	rt.desktopSharer = desktopSharer
 	bridge.pricingSnapshot = prices.manager.Snapshot
@@ -330,6 +325,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 	widgets.interval = func() time.Duration {
 		return time.Duration(svc.Preferences().WidgetRefreshIntervalSeconds) * time.Second
 	}
+	rt.forkRuntime = fork
 	return rt
 }
 
@@ -351,12 +347,7 @@ func (rt *liveApp) stop() {
 		rt.pricing.close()
 	}
 	rt.closePreferences()
-	if rt.copilotB != nil {
-		rt.copilotB.close()
-	}
-	if rt.cursorB != nil {
-		rt.cursorB.close()
-	}
+	rt.closeForkProviders()
 	rt.svc.Close()
 	if rt.repo != nil {
 		_ = rt.repo.Close()
@@ -371,23 +362,9 @@ func (rt *liveApp) pushPreferences(s *Settings) {
 func (rt *liveApp) panelActions(s *Settings) PanelActions {
 	svc := rt.svc
 	actions := PanelActions{
-		PricingVersion:   rt.pricingVersion,
-		Refresh:          func() { rt.requestRefresh(s, "") },
-		RefreshSection:   func(sec runway.Section) { rt.requestRefresh(s, sec) },
-		AuthorizeCopilot: func() { svc.AuthorizeCopilot() },
-		SetCopilotMonitoring: func(on bool) {
-			if s != nil {
-				s.SetCopilotMonitoringEnabled(on)
-			}
-		},
-		AuthorizeCursor: func() {
-			rt.requestCursorAuthorization(s)
-		},
-		SetCursorMonitoring: func(on bool) {
-			if s != nil {
-				s.SetCursorMonitoringEnabled(on)
-			}
-		},
+		PricingVersion: rt.pricingVersion,
+		Refresh:        func() { rt.requestRefresh(s, "") },
+		RefreshSection: func(sec runway.Section) { rt.requestRefresh(s, sec) },
 		SwitchAccount: func(id string) {
 			p := store.DefaultPreferences()
 			p.SelectedProvider = svc.Snapshot().Provider
@@ -445,22 +422,11 @@ func (rt *liveApp) panelActions(s *Settings) PanelActions {
 	}
 	installDetailActions(rt, &actions)
 	installAccountActions(rt, s, &actions)
+	rt.addForkPanelActions(&actions, s)
 	return actions
 }
 
 func refreshSection(s *runway.Service, sec runway.Section) {
-	if s.Preferences().SelectedProvider == store.ProviderCopilot {
-		if sec == runway.SectionQuota {
-			s.RefreshCopilot(true)
-		}
-		return
-	}
-	if s.Preferences().SelectedProvider == store.ProviderCursor {
-		if sec == runway.SectionQuota {
-			s.RefreshCursor(true)
-		}
-		return
-	}
 	if p := s.Preferences().SelectedProvider; p == store.ProviderGrok || p == store.ProviderClaude || p == store.ProviderGemini {
 		switch sec {
 		case runway.SectionQuotaEstimate, runway.SectionSessionRepair:
@@ -473,6 +439,9 @@ func refreshSection(s *runway.Service, sec runway.Section) {
 			s.RefreshProviderLocal(p)
 			return
 		}
+	}
+	if refreshForkSection(s, sec) {
+		return
 	}
 	switch sec {
 	case runway.SectionQuota:

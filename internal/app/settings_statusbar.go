@@ -337,15 +337,13 @@ func statusBarSample(l l10n.Localizer, p store.Preferences) TrayRender {
 		return runway.Meter{Title: runway.ShortWindowTitle(l, minutes), WindowMinutes: minutes, RemainingPercent: left, Health: h, ResetsAt: now.Add(reset)}
 	}
 	five, week, month := runway.FiveHourMinutes, runway.WeeklyMinutes, runway.MonthlyMinutes
-	return TrayFromStatus(runway.BuildStatusBar(l, runway.StatusInputs{Prefs: p, Provider: p.SelectedProvider, Now: now,
+	return TrayFromStatus(runway.BuildStatusBar(l, runway.StatusInputs{
+		ForkSnapshot: forkStatusBarSample(l, now), Prefs: p, Provider: p.SelectedProvider, Now: now,
 		CodexMeters: []runway.Meter{meter(five, 73, runway.HealthGreen, 2*time.Hour+15*time.Minute), meter(week, 41, runway.HealthYellow, 77*time.Hour)},
 		Claude: runway.ClaudeState{Availability: runway.ClaudeReady, Meters: []runway.Meter{
 			meter(five, 18, runway.HealthRed, 48*time.Minute), meter(week, 64, runway.HealthGreen, 120*time.Hour)}},
 		Grok: runway.GrokState{Availability: runway.GrokReady, Meters: []runway.Meter{
 			meter(week, 85, runway.HealthGreen, 30*time.Hour), meter(month, 52, runway.HealthGreen, 400*time.Hour)}},
-		Cursor: runway.CursorState{Availability: runway.CursorReady, Meters: []runway.Meter{
-			{Title: l.Text(l10n.KeyCursorAuto), PreserveTitle: true, RemainingPercent: 73, Health: runway.HealthGreen, ResetsAt: now.Add(400 * time.Hour)},
-			{Title: l.Text(l10n.KeyCursorAPI), PreserveTitle: true, RemainingPercent: 41, Health: runway.HealthYellow, ResetsAt: now.Add(400 * time.Hour)}}},
 		Gemini: runway.GeminiState{Availability: runway.GeminiReady, Meters: []runway.Meter{
 			meter(five, 56, runway.HealthGreen, 3*time.Hour), meter(week, 33, runway.HealthYellow, 90*time.Hour)}},
 	}))

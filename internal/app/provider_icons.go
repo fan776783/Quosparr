@@ -17,12 +17,6 @@ var codexMonoProviderSVG []byte
 //go:embed assets/providers/claude.svg
 var claudeMonoProviderSVG []byte
 
-//go:embed assets/providers/copilot.svg
-var copilotProviderSVG []byte
-
-//go:embed assets/providers/cursor.svg
-var cursorProviderSVG []byte
-
 //go:embed assets/providers/grok.svg
 var grokProviderSVG []byte
 
@@ -36,12 +30,10 @@ var geminiProviderSVG []byte
 var geminiMonoProviderSVG []byte
 
 var (
-	copilotProviderIcon = ui.MustParseSVG(copilotProviderSVG)
-	cursorProviderIcon  = ui.MustParseSVG(cursorProviderSVG)
-	codexProviderIcon   = ui.MustParseSVG(codexProviderSVG)
-	grokProviderIcon    = ui.MustParseSVG(grokProviderSVG)
-	claudeProviderIcon  = ui.MustParseSVG(claudeProviderSVG)
-	geminiProviderIcon  = ui.MustParseSVG(geminiProviderSVG)
+	codexProviderIcon  = ui.MustParseSVG(codexProviderSVG)
+	grokProviderIcon   = ui.MustParseSVG(grokProviderSVG)
+	claudeProviderIcon = ui.MustParseSVG(claudeProviderSVG)
+	geminiProviderIcon = ui.MustParseSVG(geminiProviderSVG)
 
 	codexMonoProviderIcon  = ui.MustParseSVG(codexMonoProviderSVG)
 	claudeMonoProviderIcon = ui.MustParseSVG(claudeMonoProviderSVG)

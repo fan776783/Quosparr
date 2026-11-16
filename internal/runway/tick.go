@@ -25,7 +25,7 @@ func (s *Service) Tick(now time.Time) {
 	// already running does.
 	idle := !s.allBusy
 	start := false
-	if reset := s.nextDueResetLocked(s.lastReset, now); !reset.IsZero() && idle {
+	if reset := s.nextDueProviderResetLocked(s.lastReset, now); !reset.IsZero() && idle {
 		s.lastReset = reset
 		start = true
 	} else if (s.schedule.IsDue(now) || refreshWidgets) && idle {
@@ -73,36 +73,10 @@ func tickKey(s Snapshot) string {
 func (s *Service) NextDueQuotaReset(after, now time.Time) time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.nextDueResetLocked(after, now)
+	return s.nextDueProviderResetLocked(after, now)
 }
 
 func (s *Service) nextDueResetLocked(after, now time.Time) time.Time {
-	if s.prefs.SelectedProvider == store.ProviderCopilot {
-		if s.opts.Copilot == nil || !s.prefs.CopilotMonitoringEnabled {
-			return time.Time{}
-		}
-		var due time.Time
-		for _, m := range s.opts.Copilot.State(now).LiveMeters() {
-			r := m.ResetsAt
-			if r.After(after) && now.Sub(r) >= time.Second && (due.IsZero() || r.Before(due)) {
-				due = r
-			}
-		}
-		return due
-	}
-	if s.prefs.SelectedProvider == store.ProviderCursor {
-		if s.opts.Cursor == nil || !s.prefs.CursorMonitoringEnabled {
-			return time.Time{}
-		}
-		var due time.Time
-		for _, m := range s.opts.Cursor.State(now).Meters {
-			r := m.ResetsAt
-			if r.After(after) && now.Sub(r) >= time.Second && (due.IsZero() || r.Before(due)) {
-				due = r
-			}
-		}
-		return due
-	}
 	if p := s.prefs.SelectedProvider; p != store.ProviderCodex {
 		var meters []Meter
 		switch {

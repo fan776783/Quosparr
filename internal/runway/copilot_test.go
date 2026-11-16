@@ -38,7 +38,7 @@ func TestCopilotRefreshIsolationAndDisplayState(t *testing.T) {
 	}
 	p.SelectedProvider = store.ProviderCopilot
 	p.SetStatusBarGroups([][]store.Provider{{store.ProviderCopilot}})
-	in := StatusInputs{Prefs: p, Provider: store.ProviderCopilot, Copilot: CopilotState{Availability: CopilotReady, Meters: []Meter{{Title: "AI Credits", PreserveTitle: true, RemainingPercent: 89}}}}
+	in := StatusInputs{Prefs: p, Provider: store.ProviderCopilot, ForkSnapshot: ForkSnapshot{Copilot: CopilotState{Availability: CopilotReady, Meters: []Meter{{Title: "AI Credits", PreserveTitle: true, RemainingPercent: 89}}}}}
 	if b := BuildStatusBar(zh, in); len(b.Components) != 1 || b.Components[0].Cells[0].Percent != "89%" {
 		t.Fatal("status bar used another provider")
 	}
