@@ -14,6 +14,7 @@ var (
 	codexPreferredWindows  = []int{FiveHourMinutes, WeeklyMinutes}
 	grokPreferredWindows   = []int{WeeklyMinutes, MonthlyMinutes}
 	claudePreferredWindows = []int{FiveHourMinutes, WeeklyMinutes}
+	geminiPreferredWindows = []int{FiveHourMinutes, WeeklyMinutes}
 )
 
 // PrimaryStandardMeter picks the first standard meter matching a preferred
@@ -82,7 +83,10 @@ type StatusInputs struct {
 	Claude  ClaudeState
 	Copilot CopilotState
 	Cursor  CursorState
-	Now     time.Time
+	// Gemini side. The preferred status window is the Gemini 5 hours, then
+	// its week; the other model families are model-specific meters.
+	Gemini GeminiState
+	Now    time.Time
 }
 
 // GrokStatusText is the status text of Grok: the countdown of the first
@@ -116,6 +120,8 @@ func statusTextFor(lc l10n.Localizer, in StatusInputs, p store.Provider) string 
 		return GrokStatusText(lc, in.Grok, in.Now)
 	case store.ProviderClaude:
 		return ClaudeStatusText(lc, in.Claude, in.Now)
+	case store.ProviderGemini:
+		return GeminiStatusText(lc, in.Gemini, in.Now)
 	default:
 		return in.CodexText
 	}
@@ -148,6 +154,27 @@ func ClaudeStatusText(lc l10n.Localizer, g ClaudeState, now time.Time) string {
 	return percentText(m)
 }
 
+// GeminiStatusText is the status text of Gemini: the countdown or remaining
+// percentage of its preferred standard meter, or the availability fallback.
+func GeminiStatusText(lc l10n.Localizer, g GeminiState, now time.Time) string {
+	m, ok := PrimaryStandardMeter(g.Meters, geminiPreferredWindows)
+	if !ok {
+		switch g.Availability {
+		case GeminiNotLoggedIn, GeminiReauthRequired, GeminiValidationRequired:
+			return lc.Text(l10n.KeyStatusLogin)
+		case GeminiLoading:
+			return lc.Text(l10n.KeyStatusWait)
+		case GeminiReady:
+			return lc.Text(l10n.KeyStatusUnknown)
+		}
+		return lc.Text(l10n.KeyStatusError)
+	}
+	if m.HasReset() {
+		return DurationLocalized(m.ResetsAt.Sub(now).Seconds(), lc.Language(), false)
+	}
+	return percentText(m)
+}
+
 func metersOf(in StatusInputs, p store.Provider) []Meter {
 	switch p {
 	case store.ProviderCopilot:
@@ -158,6 +185,8 @@ func metersOf(in StatusInputs, p store.Provider) []Meter {
 		return in.Grok.Meters
 	case store.ProviderClaude:
 		return in.Claude.Meters
+	case store.ProviderGemini:
+		return in.Gemini.Meters
 	default:
 		return in.CodexMeters
 	}
@@ -171,6 +200,8 @@ func preferredOf(p store.Provider) []int {
 		return grokPreferredWindows
 	case store.ProviderClaude:
 		return claudePreferredWindows
+	case store.ProviderGemini:
+		return geminiPreferredWindows
 	default:
 		return codexPreferredWindows
 	}
@@ -186,6 +217,8 @@ func providerStatusKey(p store.Provider) l10n.Key {
 		return l10n.KeyProviderGrok
 	case store.ProviderClaude:
 		return l10n.KeyProviderClaude
+	case store.ProviderGemini:
+		return l10n.KeyProviderGemini
 	default:
 		return l10n.KeyProviderCodex
 	}

@@ -284,7 +284,7 @@ func checkEnum[T ~string](t *testing.T, key string, values []T, valid func(T) bo
 	}
 	// A name this version does not know, such as one a newer build wrote, is
 	// the default and saves back as it.
-	for _, unknown := range []string{`"klingon"`, `""`, `"Codex"`, `"gemini"`} {
+	for _, unknown := range []string{`"klingon"`, `""`, `"Codex"`, `"future-provider"`} {
 		p := mustDecode(t, `{"`+key+`":`+unknown+`}`)
 		if get(p) != get(DefaultPreferences()) {
 			t.Errorf("%s=%s: decoded %q, want the default", key, unknown, get(p))
@@ -335,7 +335,7 @@ func TestEnumRawValuesMatchSwift(t *testing.T) {
 		got  []string
 		want []string
 	}{
-		"provider":      {conv(Providers()), strs("codex", "claude", "grok")},
+		"provider":      {conv(Providers()), strs("codex", "claude", "gemini", "grok")},
 		"language":      {conv(Languages()), strs("system", "english", "simplifiedChinese", "traditionalChinese", "korean", "japanese", "russian", "french")},
 		"appearance":    {conv(Appearances()), strs("system", "light", "dark")},
 		"background":    {conv(PanelBackgrounds()), strs("translucent", "opaque")},
@@ -756,8 +756,10 @@ func TestPanelProvidersAreGoOnlyAndLenient(t *testing.T) {
 	}
 	for raw, want := range map[string][]Provider{
 		`["grok","codex","codex"]`: {ProviderCodex, ProviderGrok},
-		`["claude","gemini"]`:      {ProviderClaude},
-		`["gemini"]`:               nil,
+		`["claude","gemini"]`:      {ProviderClaude, ProviderGemini},
+		`["claude","cursor"]`:      {ProviderClaude, ProviderCursor},
+		`["cursor"]`:               {ProviderCursor},
+		`["future-provider"]`:      nil,
 		`[]`:                       nil,
 		`"codex"`:                  nil,
 		`[1]`:                      nil,

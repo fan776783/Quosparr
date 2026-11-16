@@ -14,8 +14,9 @@ import (
 	"github.com/licoy/quosparr/internal/store"
 )
 
-// skillsTrashTab is the tab after the three providers on the skills page.
-const skillsTrashTab = 3
+// skillsTrashTab is the tab after the providers on the skills page, one
+// per store.Providers().
+const skillsTrashTab = 4
 
 // skillFlag narrows the list beyond the state; set flags combine.
 type skillFlag int

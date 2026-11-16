@@ -246,7 +246,7 @@ func (u *settingsUI) mcpActionButtons(c *ui.Context, server mcp.Server, actions 
 	}
 }
 
-// mcpSwitch turns a Codex or Grok server on or off at once, like a skill
+// mcpSwitch turns a Codex, Gemini or Grok server on or off at once, like a skill
 // switch; an entry written in a form that cannot be edited safely keeps a
 // disabled switch that says why. Claude has none: Claude Code records MCP
 // on/off per project.

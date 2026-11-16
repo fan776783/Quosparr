@@ -16,6 +16,13 @@ func codexShareOffered(acc codex.ManagedAccount) bool {
 	return codexDesktopShareSupported && acc.AuthMode != codex.AuthModeAPIKey
 }
 
+func codexProjectShareNotice(l l10n.Localizer, message string, api bool) string {
+	if codexDesktopShareSupported && api {
+		message += "\n\n" + l.CodexRuntime("projects_api_unsupported")
+	}
+	return message
+}
+
 // codexShareOption is the switch dialogs' choice to carry the desktop app's
 // local projects to the new account, and the way to undo Quosparr's last
 // change to its data.
@@ -29,7 +36,12 @@ func codexShareOption(c *ui.Context, l l10n.Localizer, on *bool, busy bool, rest
 	}
 }
 
+// undoDesktopProjects refuses state it cannot read before the restore quits
+// the desktop app, so an unpartitioned layout never closes it for nothing.
 func (rt *liveApp) undoDesktopProjects() error {
+	if err := rt.desktopSharer.CheckState(); err != nil {
+		return err
+	}
 	target, err := rt.svc.DesktopProjectOwner()
 	if err == nil {
 		_, err = rt.svc.RestoreDesktopProjects(context.Background(), target, func() (codexdesktop.Outcome, error) {

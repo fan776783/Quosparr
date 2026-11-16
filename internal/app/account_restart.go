@@ -59,13 +59,25 @@ func runCodexRestart(apps []runningApp, fallback string, running func() bool, op
 // After a failed quit the returned recovery reopens the app only when it has
 // actually exited; running is checked again because the quit may finish late.
 func prepareCodexRestart(apps []runningApp, fallback string, running func() bool, open func(string) error) (func() error, error) {
+	return prepareAppRestart(appRestart{match: isCodexDesktop, failed: errRestartCodex, quit: errCodexQuit}, apps, fallback, running, open)
+}
+
+// appRestart names the desktop app a restart quits and reopens.
+type appRestart struct {
+	match func(bundleID, name string) bool
+	// failed is returned when the app cannot be reopened, quit when it does
+	// not quit in time.
+	failed, quit error
+}
+
+func prepareAppRestart(target appRestart, apps []runningApp, fallback string, running func() bool, open func(string) error) (func() error, error) {
 	path := fallback
 	start := func() error {
 		if path == "" {
-			return errRestartCodex
+			return target.failed
 		}
 		if err := open(path); err != nil {
-			return errRestartCodex
+			return target.failed
 		}
 		return nil
 	}
@@ -73,7 +85,7 @@ func prepareCodexRestart(apps []runningApp, fallback string, running func() bool
 		if app.release != nil {
 			defer app.release()
 		}
-		if !isCodexDesktop(app.bundleID, app.name) {
+		if !target.match(app.bundleID, app.name) {
 			continue
 		}
 		if app.path != "" {
@@ -85,11 +97,11 @@ func prepareCodexRestart(apps []runningApp, fallback string, running func() bool
 					return nil
 				}
 				return start()
-			}, errCodexQuit
+			}, target.quit
 		}
 	}
 	if path == "" {
-		return nil, errRestartCodex
+		return nil, target.failed
 	}
 	return start, nil
 }
@@ -111,6 +123,9 @@ func (rt *liveApp) switchCodexResult(l l10n.Localizer, id string, restartAfter b
 	err := rt.svc.SwitchAccountWithRestart(context.Background(), id, restartAfter)
 	status := rt.svc.Snapshot().Accounts.Runtime
 	if err != nil {
+		if errors.Is(err, runway.ErrDesktopProjects) {
+			return codexRuntimeMessage(l, status), status.FilesUpdated
+		}
 		if errors.Is(err, runway.ErrCodexRuntime) {
 			return codexRuntimeMessage(l, status), false
 		}

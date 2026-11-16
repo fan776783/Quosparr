@@ -34,9 +34,7 @@ func panelBody(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap ru
 	}
 	snap.Provider = prefs.SelectedProvider
 	snap.Codex = providerView(l, snap, prefs.APICostSummaryRange)
-	grok := prefs.SelectedProvider == store.ProviderGrok
-	claude := prefs.SelectedProvider == store.ProviderClaude
-	local := grok || claude
+	local := localProvider(prefs.SelectedProvider)
 	first := true
 	for _, m := range store.NormalizeModuleOrder(prefs.MainPanelModuleOrder) {
 		if local && m == store.ModuleResetCredits && snap.Codex.ResetCreditSummary == nil {
@@ -46,6 +44,12 @@ func panelBody(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap ru
 			panelModule(c, l, m, prefs, snap, acts, &first, state)
 		}
 	}
+}
+
+// localProvider tells the providers whose usage comes from their local
+// sessions only: Grok, Claude and Gemini.
+func localProvider(p store.Provider) bool {
+	return p == store.ProviderGrok || p == store.ProviderClaude || p == store.ProviderGemini
 }
 
 func panelModuleOn(m store.Module, p store.Preferences, grok bool) bool {
@@ -86,6 +90,8 @@ func panelModule(c *ui.Context, l l10n.Localizer, m store.Module, prefs store.Pr
 	switch m {
 	case store.ModuleQuota:
 		switch {
+		case prefs.SelectedProvider == store.ProviderGemini:
+			panelGeminiQuota(c, l, snap, acts, first, state, state.resetSwitch(prefs.QuotaResetTimeFormat))
 		case claude:
 			panelClaudeQuota(c, l, snap, acts, first, state, state.resetSwitch(prefs.QuotaResetTimeFormat), prefs.AccountPrivacyModeEnabled)
 		case grok:
@@ -110,7 +116,7 @@ func panelModule(c *ui.Context, l l10n.Localizer, m store.Module, prefs store.Pr
 	case store.ModuleSessionRepair:
 		panelRepair(c, l, snap, acts, first, state)
 	case store.ModuleRecentSessions:
-		panelRecent(c, l, snap, grok || claude, acts, first, state)
+		panelRecent(c, l, snap, localProvider(prefs.SelectedProvider), acts, first, state)
 	case store.ModuleSkills:
 		panelSkills(c, l, snap, acts, first, state)
 	}
@@ -139,6 +145,8 @@ func sectionRefreshing(snap runway.Snapshot, section runway.Section) bool {
 		return snap.Grok.Refreshing
 	case store.ProviderClaude:
 		return snap.Claude.Refreshing
+	case store.ProviderGemini:
+		return snap.Gemini.Refreshing
 	default:
 		return snap.Refresh.Has(section)
 	}

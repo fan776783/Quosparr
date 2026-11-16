@@ -502,6 +502,8 @@ func trayProviderIcon(p store.Provider) *ui.SVG {
 		return codexMonoProviderIcon
 	case store.ProviderClaude:
 		return claudeMonoProviderIcon
+	case store.ProviderGemini:
+		return geminiMonoProviderIcon
 	case store.ProviderGrok:
 		return grokProviderIcon
 	}

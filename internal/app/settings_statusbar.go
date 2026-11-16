@@ -346,5 +346,7 @@ func statusBarSample(l l10n.Localizer, p store.Preferences) TrayRender {
 		Cursor: runway.CursorState{Availability: runway.CursorReady, Meters: []runway.Meter{
 			{Title: l.Text(l10n.KeyCursorAuto), PreserveTitle: true, RemainingPercent: 73, Health: runway.HealthGreen, ResetsAt: now.Add(400 * time.Hour)},
 			{Title: l.Text(l10n.KeyCursorAPI), PreserveTitle: true, RemainingPercent: 41, Health: runway.HealthYellow, ResetsAt: now.Add(400 * time.Hour)}}},
+		Gemini: runway.GeminiState{Availability: runway.GeminiReady, Meters: []runway.Meter{
+			meter(five, 56, runway.HealthGreen, 3*time.Hour), meter(week, 33, runway.HealthYellow, 90*time.Hour)}},
 	}))
 }

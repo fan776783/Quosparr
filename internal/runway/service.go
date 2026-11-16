@@ -41,11 +41,12 @@ type Options struct {
 	CostCachePath       string // api-equivalent-cost.json
 	StatusPath          string // status.json (written when ExportsStatusJSON)
 
-	// Grok, Claude, Cursor and ResetToday are optional providers.
+	// Optional quota and reset providers.
 	Grok       GrokProvider
 	Claude     ClaudeProvider
 	Copilot    CopilotProvider
 	Cursor     CursorProvider
+	Gemini     GeminiProvider
 	ResetToday ResetTodayProvider
 
 	// WidgetSink receives the widget snapshot when the widget schedule is
@@ -250,6 +251,9 @@ func New(o Options) *Service {
 	}
 	if o.Cursor != nil {
 		o.Cursor.SetOnChange(s.publish)
+	}
+	if o.Gemini != nil {
+		o.Gemini.SetOnChange(s.publish)
 	}
 	if o.ResetToday != nil {
 		o.ResetToday.SetOnChange(s.publish)
@@ -474,6 +478,7 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	hadClaude := s.quotaWantedLocked(store.ProviderClaude)
 	hadCopilot := s.quotaWantedLocked(store.ProviderCopilot)
 	hadCursor := s.quotaWantedLocked(store.ProviderCursor)
+	hadGemini := s.quotaWantedLocked(store.ProviderGemini)
 	s.prefs = p.Clone()
 	s.lc = s.localizer()
 	// A provider shown again fetches its quota now instead of at the next tick.
@@ -481,6 +486,7 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	claudeBack := !hadClaude && s.quotaWantedLocked(store.ProviderClaude)
 	copilotBack := !hadCopilot && s.quotaWantedLocked(store.ProviderCopilot)
 	cursorBack := !hadCursor && s.quotaWantedLocked(store.ProviderCursor)
+	geminiBack := !hadGemini && s.quotaWantedLocked(store.ProviderGemini)
 	now := s.now()
 	s.refreshIntervalChangedLocked(now)
 	if old.QuotaEstimateWindowMode != p.QuotaEstimateWindowMode && s.est != nil && s.quota != nil && s.estDaily != nil {
@@ -519,10 +525,18 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	if cursorBack {
 		s.RefreshCursor(false)
 	}
-	if p.SelectedProvider == store.ProviderGrok && (rangeChanged && p.ShowsCostSummary || costOn || heatOn || recentOn || speedOn) {
-		s.refreshGrokLocal()
-	} else if p.SelectedProvider == store.ProviderClaude && (rangeChanged && p.ShowsCostSummary || costOn || heatOn || recentOn || speedOn) {
-		s.refreshClaudeLocal()
+	if geminiBack {
+		s.refreshGemini(false)
+	}
+	if localOn := rangeChanged && p.ShowsCostSummary || costOn || heatOn || recentOn || speedOn; localOn {
+		switch p.SelectedProvider {
+		case store.ProviderGrok:
+			s.refreshGrokLocal()
+		case store.ProviderClaude:
+			s.refreshClaudeLocal()
+		case store.ProviderGemini:
+			s.refreshGeminiLocal()
+		}
 	}
 	if reportOn {
 		s.RefreshSessionReport(true)
@@ -554,7 +568,7 @@ func (s *Service) Preferences() store.Preferences {
 	return s.prefs.Clone()
 }
 
-// SelectProvider switches the panel. claude is accepted like codex and grok.
+// SelectProvider switches the panel to any known provider.
 func (s *Service) SelectProvider(p store.Provider) {
 	prefs := s.Preferences()
 	if prefs.SelectedProvider == p {

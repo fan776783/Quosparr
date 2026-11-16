@@ -22,11 +22,13 @@ const (
 	TargetClaude InstallTarget = "claude" // <Claude config>/skills
 	TargetGrok   InstallTarget = "grok"   // $GROK_HOME/skills
 	TargetShared InstallTarget = "shared" // ~/.agents/skills, which Codex and Grok both read
+	TargetGemini InstallTarget = "gemini" // <GeminiHome>/config/skills, read by the Antigravity App and CLI
 )
 
-// InstallTargets lists the targets in the order to offer them.
+// InstallTargets lists the targets in the order to offer them: the
+// providers in their display order, then the shared folder.
 func InstallTargets() []InstallTarget {
-	return []InstallTarget{TargetCodex, TargetClaude, TargetGrok, TargetShared}
+	return []InstallTarget{TargetCodex, TargetClaude, TargetGemini, TargetGrok, TargetShared}
 }
 
 // InstallRoot is the folder a target writes into.

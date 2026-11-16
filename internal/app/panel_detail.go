@@ -24,6 +24,9 @@ func providerView(l l10n.Localizer, snap runway.Snapshot, displayRange store.Cos
 	if snap.Provider == store.ProviderClaude {
 		return claudeAsCodexView(l, snap.Claude, displayRange)
 	}
+	if snap.Provider == store.ProviderGemini {
+		return geminiAsCodexView(l, snap.Gemini, displayRange)
+	}
 	if snap.Provider != store.ProviderGrok {
 		return snap.Codex
 	}
@@ -53,6 +56,17 @@ func claudeAsCodexView(l l10n.Localizer, g runway.ClaudeState, displayRange stor
 		empty := codexapi.ResetCreditsSnapshot{Credits: []codexapi.ResetCredit{}, UpdatedAt: g.UpdatedAt}
 		sum := runway.SummarizeCredits(empty)
 		v.ResetCredits, v.ResetCreditSummary = &empty, &sum
+	}
+	return v
+}
+
+// geminiAsCodexView shows the Gemini quota and local sessions; Antigravity
+// has no reset credits, and nothing of Codex may show through.
+func geminiAsCodexView(l l10n.Localizer, g runway.GeminiState, displayRange store.CostRange) runway.CodexView {
+	v := runway.CodexView{Meters: g.Meters, Heatmap: g.Heatmap, DisplayedCost: g.Cost, DisplayedRange: displayRange, Cost: g.Cost, RecentSessions: g.RecentSessions, Speed: g.Speed, SpeedError: g.SpeedError}
+	if g.Cost != nil {
+		d := runway.DisplayCost(l, *g.Cost, displayRange, "", time.Now())
+		v.CostText, v.CostSubtitle, v.CostLines = d.Text, d.Subtitle, d.Lines
 	}
 	return v
 }

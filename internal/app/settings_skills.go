@@ -56,7 +56,9 @@ func (u *settingsUI) skillsTabs(c *ui.Context, acts SkillActions) {
 	s := u.skillsState()
 	l, t := u.L(), c.Theme()
 	ps := store.Providers()
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+	// Four providers and the trash fill the narrowest window in some
+	// languages; the actions then wrap below the tabs.
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Wrap().Children(func() {
 		seg := ui.SegmentedBase(c.Key("skills-tabs"), &s.tab, len(ps)+1)
 		seg.Track.Padding(3).Gap(2).Radius(7).Background(t.Text.Alpha(0.06)).Children(func() {
 			for i := 0; i <= len(ps); i++ {

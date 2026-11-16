@@ -43,9 +43,11 @@ func sessionTestRuntime(t *testing.T) (*liveApp, map[string][]string) {
 	codexStore := codex.NewStore(codexHome, runway)
 	claudeStore := claude.NewStore(claudeHome, runway, home, claudeHome, "")
 	grokStore := grok.NewStore(grokHome, runway)
+	gmod := newGeminiModule(home, "test")
 	rt := &liveApp{
 		codex: codexStore, claudeMod: claude.NewModule(claudeStore),
-		grokMod: grok.NewModule(grokStore),
+		grokMod:   grok.NewModule(grokStore),
+		geminiMod: gmod, geminiB: newGeminiBridge(gmod, home, store.DefaultPreferences(), nil),
 	}
 	return rt, map[string][]string{
 		sessions.ProviderCodex:  {filepath.Join(codexHome, "sessions"), filepath.Join(codexHome, "archived_sessions")},

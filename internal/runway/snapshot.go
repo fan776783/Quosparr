@@ -49,6 +49,7 @@ type Snapshot struct {
 	Claude     ClaudeState
 	Copilot    CopilotState
 	Cursor     CursorState
+	Gemini     GeminiState
 	ResetToday ResetTodayState
 	Refresh    RefreshView
 	StatusBar  StatusBarView

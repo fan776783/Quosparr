@@ -187,7 +187,15 @@ func (u *settingsUI) sessionRow(c *ui.Context, item sessions.ManagedSession, act
 				delete(s.selected, key)
 			}
 		}
-		button := ui.ButtonBase(c.Key("session-open-" + key)).Label(tx(l, xSessionsOpenDetails, title)).Grow(1).Basis(0).Cursor(ui.CursorPointer)
+		// Antigravity conversations are binary databases the detail reader
+		// does not open: their rows say so and do not open.
+		noDetail := item.Provider == sessions.ProviderGemini
+		button := ui.ButtonBase(c.Key("session-open-" + key)).Label(tx(l, xSessionsOpenDetails, title)).Grow(1).Basis(0)
+		if noDetail {
+			button.Tooltip(tx(l, xSessionsGeminiNoDetail))
+		} else {
+			button.Cursor(ui.CursorPointer)
+		}
 		button.Children(func() {
 			ui.Column(c).Gap(2).Grow(1).Basis(0).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
@@ -211,7 +219,7 @@ func (u *settingsUI) sessionRow(c *ui.Context, item sessions.ManagedSession, act
 				})
 			})
 		})
-		if button.Clicked() {
+		if button.Clicked() && !noDetail {
 			s.open = key
 			u.loadSessionDetail(actions, item)
 		}

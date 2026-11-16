@@ -12,11 +12,14 @@ type Provider string
 const (
 	ProviderCodex  Provider = "codex"
 	ProviderClaude Provider = "claude"
+	ProviderGemini Provider = "gemini"
 	ProviderGrok   Provider = "grok"
 )
 
-// Providers returns the upstream account and CLI providers, in display order.
-func Providers() []Provider { return []Provider{ProviderCodex, ProviderClaude, ProviderGrok} }
+// Providers returns the account and CLI providers, in display order.
+func Providers() []Provider {
+	return []Provider{ProviderCodex, ProviderClaude, ProviderGemini, ProviderGrok}
+}
 
 // Valid reports whether v is a known value.
 func (v Provider) Valid() bool {
