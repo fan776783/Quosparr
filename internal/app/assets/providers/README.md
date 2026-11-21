@@ -13,3 +13,5 @@ Interface glyphs in `internal/app/glyphs_gen.go` come from [Remix Icon](https://
 Regenerate both sets from the repository root with `go run ./Scripts/gen-glyphs`; only generation downloads the pinned official packages, app builds use local embedded assets
 
 `copilot.svg` uses the existing Remix Icon GitHub glyph from `website/icons/github-fill.svg`, under `REMIXICON-LICENSE`.
+
+`devin-color.svg` and `devin.svg` are unmodified files from the same pinned LobeHub Icons archive. LobeHub has no Factory artwork, so `droid.svg` is the unmodified Remix Icon `robot-2-line` from the pinned `remixicon` archive, under `REMIXICON-LICENSE`.

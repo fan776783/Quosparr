@@ -95,6 +95,9 @@ func panelStatusLines(c *ui.Context, l l10n.Localizer, prefs store.Preferences, 
 		message, failure = "", snap.Copilot.LastError
 	case store.ProviderCursor:
 		message, failure = "", snap.Cursor.LastError
+	case store.ProviderDroid, store.ProviderDevin:
+		// The quota section shows the state itself.
+		message, failure = "", ""
 	case store.ProviderGrok:
 		message, failure = snap.Grok.Accounts.Message, snap.Grok.LastError
 	case store.ProviderClaude:

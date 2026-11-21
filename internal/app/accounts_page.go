@@ -42,6 +42,9 @@ func renderAccountsPage(c *ui.Context, u *settingsUI) {
 	if renderCursorAccountsPage(c, u, f, rt) {
 		return
 	}
+	if renderQuotaOnlyAccountsPage(c, u, f, rt) {
+		return
+	}
 	switch f.kind {
 	case accountKindCodex:
 		renderCodexAccounts(c, u, f, rt)

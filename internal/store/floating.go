@@ -83,9 +83,6 @@ func (v FloatingAppFilter) Valid() bool { return slices.Contains(FloatingAppFilt
 // MaxFloatingApps is how many apps the list keeps.
 const MaxFloatingApps = 64
 
-// MaxFloatingProviders is how many providers the floating window shows.
-const MaxFloatingProviders = 3
-
 // FloatingApp is an app of the floating window's list. ID is what the system
 // knows it by: its bundle identifier on macOS (or its path), its
 // AppUserModelID, known-folder path or executable on Windows, and its
@@ -116,7 +113,7 @@ func (f *FloatingWindow) normalize() {
 	if !f.Style.Valid() {
 		f.Style = FloatingStyleCapsule
 	}
-	f.Providers = canonicalDisplayProviders(f.Providers, MaxFloatingProviders)
+	f.Providers = canonicalDisplayProviders(f.Providers, len(DisplayProviders()))
 	if len(f.Providers) == 0 {
 		f.Providers = nil
 	}
@@ -155,7 +152,7 @@ func (f FloatingWindow) HasApp(id string) bool {
 // FloatingSelection is what the floating window shows: the chosen
 // providers, or the main panel's.
 func (p Preferences) FloatingSelection() []Provider {
-	if sel := canonicalDisplayProviders(p.FloatingWindow.Providers, MaxFloatingProviders); len(sel) > 0 {
+	if sel := canonicalDisplayProviders(p.FloatingWindow.Providers, len(DisplayProviders())); len(sel) > 0 {
 		return sel
 	}
 	if p.SelectedProvider.Valid() {

@@ -29,12 +29,7 @@ func panelHeader(c *ui.Context, a *App, l l10n.Localizer, prefs store.Preference
 		if providers := prefs.DisplayPanelSelection(); len(providers) > 1 {
 			providerStrip(c, a, l, snap, providers, prefs.SelectedProvider, acts.SelectProvider)
 		}
-		if prefs.SelectedProvider == store.ProviderCopilot {
-			copilotIdentityRow(c, l, prefs, snap.Copilot)
-			return
-		}
-		if prefs.SelectedProvider == store.ProviderCursor {
-			cursorIdentityRow(c, l, prefs, snap.Cursor)
+		if forkIdentityRow(c, l, prefs, snap) {
 			return
 		}
 		if grokView {
@@ -57,11 +52,8 @@ func panelHeader(c *ui.Context, a *App, l l10n.Localizer, prefs store.Preference
 }
 
 func panelBusy(snap runway.Snapshot, grokView bool) bool {
-	if snap.Provider == store.ProviderCopilot {
-		return snap.Copilot.Refreshing
-	}
-	if snap.Provider == store.ProviderCursor {
-		return snap.Cursor.Refreshing
+	if busy, ok := forkPanelBusy(snap); ok {
+		return busy
 	}
 	if grokView && snap.Grok.Refreshing {
 		return true
@@ -88,6 +80,7 @@ func providerStrip(c *ui.Context, a *App, l l10n.Localizer, snap runway.Snapshot
 			selected := p == cur
 			tab := ui.ButtonBase(c.Key("provider-tab-"+string(p))).Label(name).Disabled(selectFn == nil).
 				Grow(1).Basis(0).Padding(6, 10, 7, 10).Radius(radiusRow).Cursor(ui.CursorPointer)
+			compact := compactProviderTab(tab, name, len(providers), selected)
 			switch {
 			case selected && tab.Hovered():
 				tab.Background(mono(t, 0.10, 0.15))
@@ -105,7 +98,9 @@ func providerStrip(c *ui.Context, a *App, l l10n.Localizer, snap runway.Snapshot
 							return
 						}
 						ProviderMonoIcon(c, p, 16).TextColor(inkTertiary(t))
-						ui.Text(c, name).FontSize(fsCallout).TextColor(inkTertiary(t)).SingleLine()
+						if !compact {
+							ui.Text(c, name).FontSize(fsCallout).TextColor(inkTertiary(t)).SingleLine()
+						}
 					})
 					meter, ok := runway.ShortestWindowMeter(providerMeters(snap, p))
 					stripBar(c, meter, ok, selected)
@@ -120,11 +115,10 @@ func providerStrip(c *ui.Context, a *App, l l10n.Localizer, snap runway.Snapshot
 }
 
 func providerMeters(snap runway.Snapshot, p store.Provider) []runway.Meter {
+	if m, ok := forkProviderMeters(snap, p); ok {
+		return m
+	}
 	switch p {
-	case store.ProviderCopilot:
-		return snap.Copilot.LiveMeters()
-	case store.ProviderCursor:
-		return snap.Cursor.LiveMeters()
 	case store.ProviderGrok:
 		return snap.Grok.Meters
 	case store.ProviderClaude:

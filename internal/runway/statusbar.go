@@ -110,11 +110,10 @@ func GrokStatusText(lc l10n.Localizer, g GrokState, now time.Time) string {
 }
 
 func statusTextFor(lc l10n.Localizer, in StatusInputs, p store.Provider) string {
+	if s, ok := forkStatusText(lc, in, p); ok {
+		return s
+	}
 	switch p {
-	case store.ProviderCopilot:
-		return CopilotStatusText(lc, in.Copilot)
-	case store.ProviderCursor:
-		return CursorStatusText(lc, in.Cursor)
 	case store.ProviderGrok:
 		return GrokStatusText(lc, in.Grok, in.Now)
 	case store.ProviderClaude:
@@ -175,11 +174,10 @@ func GeminiStatusText(lc l10n.Localizer, g GeminiState, now time.Time) string {
 }
 
 func metersOf(in StatusInputs, p store.Provider) []Meter {
+	if m, ok := forkMeters(in, p); ok {
+		return m
+	}
 	switch p {
-	case store.ProviderCopilot:
-		return in.Copilot.LiveMeters()
-	case store.ProviderCursor:
-		return in.Cursor.LiveMeters()
 	case store.ProviderGrok:
 		return in.Grok.Meters
 	case store.ProviderClaude:
@@ -192,9 +190,10 @@ func metersOf(in StatusInputs, p store.Provider) []Meter {
 }
 
 func preferredOf(p store.Provider) []int {
+	if w, ok := forkPreferred(p); ok {
+		return w
+	}
 	switch p {
-	case store.ProviderCopilot, store.ProviderCursor:
-		return nil
 	case store.ProviderGrok:
 		return grokPreferredWindows
 	case store.ProviderClaude:
@@ -207,11 +206,10 @@ func preferredOf(p store.Provider) []int {
 }
 
 func providerStatusKey(p store.Provider) l10n.Key {
+	if k, ok := forkStatusKey(p); ok {
+		return k
+	}
 	switch p {
-	case store.ProviderCopilot:
-		return l10n.KeyProviderCopilot
-	case store.ProviderCursor:
-		return l10n.KeyProviderCursor
 	case store.ProviderGrok:
 		return l10n.KeyProviderGrok
 	case store.ProviderClaude:

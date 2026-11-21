@@ -38,6 +38,8 @@ type PanelActions struct {
 	AuthorizeCopilot     func()
 	SetCursorMonitoring  func(bool)
 	AuthorizeCursor      func()
+	// SetQuotaOnlyMonitoring turns Droid or Devin monitoring on or off.
+	SetQuotaOnlyMonitoring func(store.Provider, bool)
 	// PanelShown reports the panel opening and closing; the panel provider's
 	// local data loads only while it shows.
 	PanelShown    func(open bool)

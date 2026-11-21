@@ -48,6 +48,10 @@ func ProviderIcon(c *ui.Context, provider store.Provider, size float32) ui.Eleme
 		return ui.Image(c, copilotProviderIcon).Size(size, size)
 	case store.ProviderCursor:
 		return ui.Image(c, cursorProviderIcon).Size(size, size)
+	case store.ProviderDroid:
+		return ui.Image(c, droidProviderIcon).Size(size, size)
+	case store.ProviderDevin:
+		return ui.Image(c, devinProviderIcon).Size(size, size)
 	case store.ProviderCodex:
 		return ui.Image(c, codexProviderIcon).Size(size, size)
 	case store.ProviderGrok:
@@ -68,6 +72,8 @@ func ProviderMonoIcon(c *ui.Context, provider store.Provider, size float32) ui.E
 		return ui.Image(c, copilotProviderIcon).Size(size, size)
 	case store.ProviderCursor:
 		return ui.Image(c, cursorProviderIcon).Size(size, size)
+	case store.ProviderDevin:
+		return ui.Image(c, devinMonoIcon).Size(size, size)
 	case store.ProviderCodex:
 		return ui.Image(c, codexMonoProviderIcon).Size(size, size)
 	case store.ProviderClaude:

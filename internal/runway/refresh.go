@@ -315,10 +315,7 @@ func (s *Service) showsProviderLocked(p store.Provider) bool {
 // shown, or it has a tab in the panel's provider strip. A provider the panel
 // hides and nothing else shows is not fetched.
 func (s *Service) quotaWantedLocked(p store.Provider) bool {
-	if p == store.ProviderCopilot && !s.prefs.CopilotMonitoringEnabled {
-		return false
-	}
-	if p == store.ProviderCursor && !s.prefs.CursorMonitoringEnabled {
+	if !s.prefs.MonitoringEnabled(p) {
 		return false
 	}
 	return s.showsProviderLocked(p) || slices.Contains(s.prefs.DisplayPanelSelection(), p)
@@ -431,9 +428,10 @@ func (s *Service) refreshPanelLocal() {
 	p := s.prefs
 	estimateDue := p.ShowsQuotaEstimateSummary && (s.est == nil || !s.now().Before(s.estAt.Add(s.refreshInterval())))
 	s.mu.Unlock()
-	switch p.SelectedProvider {
-	case store.ProviderCopilot, store.ProviderCursor:
+	if p.SelectedProvider.QuotaOnly() {
 		return
+	}
+	switch p.SelectedProvider {
 	case store.ProviderGrok:
 		s.refreshGrokLocal()
 	case store.ProviderClaude:

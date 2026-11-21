@@ -95,20 +95,19 @@ func renderCursorAccount(c *ui.Context, u *settingsUI, s runway.CursorState, ref
 	if !p.CursorMonitoringEnabled {
 		return
 	}
-	settingsSection(c, l.Text(l10n.KeyAccountsCurrent), "", func() {
-		if ghostButton(c, icRefresh, l.Text(l10n.KeyRefresh), s.Refreshing, refresh == nil).Clicked() {
+	e := externalAccount{
+		email: s.Email, plan: s.Plan, warning: s.LastError, empty: runway.CursorStatusText(l, s),
+		meters: s.LiveMeters(), details: s.Lines, updated: s.UpdatedAt,
+	}
+	if e.warning == "" && s.Stale {
+		e.warning = l.Text(l10n.KeyCursorStale)
+	}
+	externalAccountList(c, u, store.ProviderCursor, e, s.Refreshing, func() {
+		if refresh != nil {
 			refresh()
 		}
-	}, func() {
-		cursorIdentityRow(c, l, p, s)
-		summary := runway.CursorStatusText(l, s)
-		if len(s.Meters) > 0 && !s.Stale {
-			summary = s.Meters[0].Title + " · " + summary
-		}
-		if s.LastError != "" {
-			summary = s.LastError
-		}
-		dimText(c, accountUpdatedSummary(l, summary, s.UpdatedAt))
+	}, func() { externalAccountEmpty(c, e) })
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		cursorAuthorizationButton(c, l, s, authorize)
 		if linkButton(c, l.Text(l10n.KeyCursorOpenUsage)).Clicked() {
 			c.OpenURL(cursorUsageURL)

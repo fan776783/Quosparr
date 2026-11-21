@@ -18,7 +18,9 @@ func readCursorPreferences(r *reader) CursorPreferences {
 
 // DisplayProviders includes quota-only providers. Account, CLI, session, Skill,
 // MCP and pricing operations must continue to use Providers.
-func DisplayProviders() []Provider { return append(Providers(), ProviderCursor, ProviderCopilot) }
+func DisplayProviders() []Provider {
+	return append(Providers(), ProviderCursor, ProviderCopilot, ProviderDroid, ProviderDevin)
+}
 
 func canonicalDisplayProviders(in []Provider, limit int) []Provider {
 	seen := make(map[Provider]bool, len(in))

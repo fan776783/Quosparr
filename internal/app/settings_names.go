@@ -14,6 +14,10 @@ func providerKey(v store.Provider) l10n.Key {
 		return l10n.KeyProviderCopilot
 	case store.ProviderCursor:
 		return l10n.KeyProviderCursor
+	case store.ProviderDroid:
+		return l10n.KeyProviderDroid
+	case store.ProviderDevin:
+		return l10n.KeyProviderDevin
 	case store.ProviderGrok:
 		return l10n.KeyProviderGrok
 	case store.ProviderClaude:

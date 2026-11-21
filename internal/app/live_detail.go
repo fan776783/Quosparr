@@ -33,9 +33,10 @@ func (rt *liveApp) queryDetailCost(ctx context.Context, provider store.Provider,
 		}
 	}()
 	now := time.Now()
-	switch provider {
-	case store.ProviderCopilot, store.ProviderCursor:
+	if provider.QuotaOnly() {
 		return usage.Summary{}, errDetailUnavailable
+	}
+	switch provider {
 	case store.ProviderGrok:
 		return rt.queryGrokDetailCost(ctx, q, now)
 	case store.ProviderClaude:

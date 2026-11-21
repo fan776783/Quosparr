@@ -21,4 +21,6 @@ func (p Preferences) CopilotCredentialSource() string {
 		return "cli"
 	}
 }
-func (p Provider) QuotaOnly() bool { return p == ProviderCursor || p == ProviderCopilot }
+func (p Provider) QuotaOnly() bool {
+	return p == ProviderCursor || p == ProviderCopilot || p == ProviderDroid || p == ProviderDevin
+}

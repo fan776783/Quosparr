@@ -122,6 +122,7 @@ type Preferences struct {
 	ShowsSkills bool `json:"showsSkills"`
 	CursorPreferences
 	CopilotPreferences
+	QuotaOnlyPreferences
 	// FloatingWindow is Go-only: the desktop floating window, omitted while
 	// it is at its default.
 	FloatingWindow FloatingWindow `json:"floatingWindow,omitzero"`

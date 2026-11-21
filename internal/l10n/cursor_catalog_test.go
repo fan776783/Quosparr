@@ -25,7 +25,7 @@ func TestCursorCatalogStaysSeparateAndComplete(t *testing.T) {
 			t.Fatal("Cursor English fallback lost")
 		}
 	}
-	if len(Keys()) != len(allKeys)+len(cursorKeys)+len(copilotKeys) {
+	if len(Keys()) != len(allKeys)+len(cursorKeys)+len(copilotKeys)+len(quotaOnlyKeys) {
 		t.Fatal("complete key catalog lost extension keys")
 	}
 }

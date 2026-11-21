@@ -94,26 +94,24 @@ func renderCopilotAccountsPage(c *ui.Context, u *settingsUI, f *accountForm, rt 
 	if !p.CopilotMonitoringEnabled {
 		return true
 	}
-	settingsSection(c, l.Text(l10n.KeyAccountsCurrent), "", func() {
-		if ghostButton(c, icRefresh, l.Text(l10n.KeyRefresh), state.Refreshing, false).Clicked() {
-			rt.svc.RefreshCopilot(true)
-		}
-	}, func() {
-		copilotIdentityRow(c, l, p, state)
-		summary := runway.CopilotStatusText(l, state)
-		if state.LastError != "" {
-			summary = state.LastError
-		}
-		dimText(c, accountUpdatedSummary(l, summary, state.UpdatedAt))
-		copilotAuthorizationButton(c, l, state, func() { rt.svc.AuthorizeCopilot() })
-		if len(state.Accounts) > 1 || len(state.Accounts) == 1 && p.CopilotAccountID != "" && p.CopilotAccountID != state.Accounts[0].ID {
-			dimText(c, l.Copilot("choose"))
-			for _, account := range state.Accounts {
-				if ghostButton(c, icPlug, accountPrivate(p.AccountPrivacyModeEnabled, account.Login), false, s.ReadOnly() || state.Refreshing).Clicked() {
-					s.SetCopilotAccount(account.ID)
-				}
+	e := externalAccount{
+		email: state.Email, plan: state.Plan, warning: state.LastError, empty: runway.CopilotStatusText(l, state),
+		meters: state.LiveMeters(), details: state.Lines, updated: state.UpdatedAt,
+	}
+	if e.warning == "" && state.Stale {
+		e.warning = l.Copilot("stale")
+	}
+	externalAccountList(c, u, store.ProviderCopilot, e, state.Refreshing, func() { rt.svc.RefreshCopilot(true) }, func() { externalAccountEmpty(c, e) })
+	ui.Row(c).Children(func() { copilotAuthorizationButton(c, l, state, func() { rt.svc.AuthorizeCopilot() }) })
+	if len(state.Accounts) > 1 || len(state.Accounts) == 1 && p.CopilotAccountID != "" && p.CopilotAccountID != state.Accounts[0].ID {
+		dimText(c, l.Copilot("choose"))
+		for _, account := range state.Accounts {
+			if ghostButton(c, icPlug, accountPrivate(p.AccountPrivacyModeEnabled, account.Login), false, s.ReadOnly() || state.Refreshing).Clicked() {
+				s.SetCopilotAccount(account.ID)
 			}
 		}
+	}
+	ui.Row(c).Children(func() {
 		if linkButton(c, l.Copilot("open")).Clicked() {
 			c.OpenURL(copilotUsageURL)
 		}

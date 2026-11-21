@@ -95,6 +95,8 @@ func activePanelAccount(s runway.Snapshot, p store.Provider) string {
 		return s.Copilot.IdentityID
 	case store.ProviderCursor:
 		return s.Cursor.IdentityID
+	case store.ProviderDroid, store.ProviderDevin:
+		return quotaOnlyState(s, p).Email
 	case store.ProviderGrok:
 		return s.Grok.Accounts.ActiveID
 	case store.ProviderClaude:

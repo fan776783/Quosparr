@@ -221,7 +221,7 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 	if opts.Settings != nil {
 		prefs = opts.Settings.Prefs()
 	}
-	fork := newForkRuntime(home, prefs, langs)
+	fork := newForkRuntime(home, opts.Version, prefs, langs)
 	prices := newLivePricing(home, prefs, opts.PricingFetch, opts.PricingNow)
 	priceSource := usage.SnapshotPrices(prices.manager.Snapshot)
 	codexStore := codex.NewStore(platform.CodexDir(home), platform.RunwayDir(home))

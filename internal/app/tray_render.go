@@ -498,6 +498,10 @@ func trayProviderIcon(p store.Provider) *ui.SVG {
 		return copilotProviderIcon
 	case store.ProviderCursor:
 		return cursorProviderIcon
+	case store.ProviderDroid:
+		return droidProviderIcon
+	case store.ProviderDevin:
+		return devinMonoIcon
 	case store.ProviderCodex:
 		return codexMonoProviderIcon
 	case store.ProviderClaude:

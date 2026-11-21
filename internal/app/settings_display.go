@@ -45,7 +45,7 @@ func (u *settingsUI) appearanceGroup(c *ui.Context) {
 		if providers := p.DisplayPanelSelection(); len(providers) > 1 {
 			row(tx(l, xProvider), tx(l, xProviderDescription), func() {
 				selected := max(0, slices.Index(providers, p.SelectedProvider))
-				if providerTabsOf(c.Key("provider"), providers, &selected, ro, providerLabels(l, providers)...) {
+				if providerTabsOf(c.Key("provider"), providers, &selected, ro, providerTabLabelsSelected(l, providers, selected)...) {
 					s.SetSelectedProvider(providers[selected])
 				}
 			})

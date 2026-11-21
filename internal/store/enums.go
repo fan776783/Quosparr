@@ -23,7 +23,7 @@ func Providers() []Provider {
 
 // Valid reports whether v is a known value.
 func (v Provider) Valid() bool {
-	return v == ProviderCopilot || v == ProviderCursor || slices.Contains(Providers(), v)
+	return v == ProviderCopilot || v == ProviderCursor || v == ProviderDroid || v == ProviderDevin || slices.Contains(Providers(), v)
 }
 
 // Language is the user's language preference.

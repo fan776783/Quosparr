@@ -16,9 +16,10 @@ import (
 func (a *App) accountsPage(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap runway.Snapshot, acts PanelActions) {
 	a.panelState.accounts.page = prefs.SelectedProvider
 	defer a.accountsNoticeDialog(c, l)
-	switch prefs.SelectedProvider {
-	case store.ProviderCopilot, store.ProviderCursor:
+	if prefs.SelectedProvider.QuotaOnly() {
 		return
+	}
+	switch prefs.SelectedProvider {
 	case store.ProviderGrok:
 		a.grokAccountsPage(c, l, prefs, snap, acts)
 	case store.ProviderClaude:

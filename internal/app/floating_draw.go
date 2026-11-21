@@ -79,6 +79,10 @@ func floatingProviderIcon(p *ui.Painter, prov store.Provider, r ui.Rect, k float
 		p.Icon(copilotProviderIcon, r, k.text)
 	case store.ProviderCursor:
 		p.Icon(cursorProviderIcon, r, k.text)
+	case store.ProviderDroid:
+		p.Icon(droidProviderIcon, r, k.text)
+	case store.ProviderDevin:
+		p.Image(devinProviderIcon, r, ui.Contain)
 	case store.ProviderCodex:
 		p.Image(codexProviderIcon, r, ui.Contain)
 	case store.ProviderClaude:
@@ -115,7 +119,7 @@ func floatingStyleRadius(style store.FloatingStyle, h float32) float32 {
 func floatingSize(style store.FloatingStyle, v runway.FloatingView, family string) (float32, float32) {
 	switch style {
 	case store.FloatingStyleCard:
-		return cardSize(v, family)
+		return cardColumnsSize(v, family)
 	case store.FloatingStyleRings:
 		return ringsSize(v, family)
 	case store.FloatingStyleBattery:
@@ -133,7 +137,7 @@ func drawFloating(p *ui.Painter, r ui.Rect, style store.FloatingStyle, v runway.
 	}
 	switch style {
 	case store.FloatingStyleCard:
-		drawCard(p, r, v, k, family)
+		drawCardColumns(p, r, v, k, family)
 	case store.FloatingStyleRings:
 		drawRings(p, r, v, k, family)
 	case store.FloatingStyleBattery:

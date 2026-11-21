@@ -13,17 +13,21 @@ import (
 type forkRuntime struct {
 	copilotB *copilotBridge
 	cursorB  *cursorBridge
+	droidB   *quotaOnlyBridge
+	devinB   *quotaOnlyBridge
 }
 
-func newForkRuntime(home string, prefs store.Preferences, langs []string) forkRuntime {
+func newForkRuntime(home, version string, prefs store.Preferences, langs []string) forkRuntime {
 	return forkRuntime{
 		copilotB: newCopilotBridge(home, prefs, langs),
 		cursorB:  newCursorBridge(home, prefs, langs),
+		droidB:   newDroidBridge(home, prefs, langs),
+		devinB:   newDevinBridge(home, version, prefs, langs),
 	}
 }
 
 func (f forkRuntime) providers() runway.ForkProviders {
-	return runway.ForkProviders{Copilot: f.copilotB, Cursor: f.cursorB}
+	return runway.ForkProviders{Copilot: f.copilotB, Cursor: f.cursorB, Droid: f.droidB, Devin: f.devinB}
 }
 
 func (rt *liveApp) closeForkProviders() {
@@ -42,6 +46,11 @@ func (rt *liveApp) setForkPreferences(p store.Preferences) {
 	if rt.cursorB != nil {
 		rt.cursorB.setPreferences(p, rt.langs)
 	}
+	for _, b := range []*quotaOnlyBridge{rt.droidB, rt.devinB} {
+		if b != nil {
+			b.setPreferences(p, rt.langs)
+		}
+	}
 }
 
 func (rt *liveApp) addForkPanelActions(actions *PanelActions, s *Settings) {
@@ -52,6 +61,11 @@ func (rt *liveApp) addForkPanelActions(actions *PanelActions, s *Settings) {
 		}
 	}
 	actions.AuthorizeCursor = func() { rt.requestCursorAuthorization(s) }
+	actions.SetQuotaOnlyMonitoring = func(p store.Provider, on bool) {
+		if s != nil {
+			s.SetQuotaOnlyMonitoring(p, on)
+		}
+	}
 	actions.SetCursorMonitoring = func(on bool) {
 		if s != nil {
 			s.SetCursorMonitoringEnabled(on)
@@ -68,6 +82,10 @@ func refreshForkSection(s *runway.Service, sec runway.Section) bool {
 	case store.ProviderCursor:
 		if sec == runway.SectionQuota {
 			s.RefreshCursor(true)
+		}
+	case store.ProviderDroid, store.ProviderDevin:
+		if sec == runway.SectionQuota {
+			s.RefreshQuotaOnly(s.Preferences().SelectedProvider, true)
 		}
 	default:
 		return false

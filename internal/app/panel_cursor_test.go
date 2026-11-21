@@ -103,7 +103,7 @@ func TestCursorPanelFourTabsFitAndUsageLinkWorks(t *testing.T) {
 }
 
 func TestCursorDoesNotEnterCLIManagementTabs(t *testing.T) {
-	if len(store.DisplayProviders()) != len(store.Providers())+2 || skillsTrashTab != len(store.Providers()) {
+	if len(store.DisplayProviders()) != len(store.Providers())+4 || skillsTrashTab != len(store.Providers()) {
 		t.Fatal("management providers conflict with trash")
 	}
 	for _, p := range store.Providers() {
@@ -143,7 +143,8 @@ func TestCursorAccountTabShowsReadOnlyIdentityAndRefresh(t *testing.T) {
 	if f.kind != cursorAccountKind() || f.mode != "" || f.paste != "" {
 		t.Fatal("Cursor tab did not open or retained another provider's editor")
 	}
-	if tt.HasText(s.Email) || !tt.HasText(accountPrivate(true, s.Email)) || !tt.HasText(s.Plan) || !tt.HasText("Auto · 75%") {
+	left := l10n.Format("%d%% %s", 75, u.text(l10n.KeyLeft))
+	if tt.HasText(s.Email) || !tt.HasText(accountPrivate(true, s.Email)) || !tt.HasText(s.Plan) || !tt.HasText("Auto") || !tt.HasText(left) || !tt.HasText(u.text(l10n.KeyAccountsCurrent)) {
 		t.Fatal("current Cursor identity, privacy or quota missing")
 	}
 	for _, key := range []l10n.Key{l10n.KeyAccountsActions, l10n.KeyAccountsMakeCurrent, l10n.KeyAccountsAddOAuth} {
@@ -156,7 +157,7 @@ func TestCursorAccountTabShowsReadOnlyIdentityAndRefresh(t *testing.T) {
 	}
 	s.LastError, s.Stale = u.text(l10n.KeyCursorReauth), true
 	tt.Frame()
-	if !tt.HasText(s.LastError) || tt.HasText("Auto · 75%") {
+	if !tt.HasText(s.LastError) || tt.HasText(left) {
 		t.Fatal("stale quota hid the sign-in failure")
 	}
 	u.s.SetCursorMonitoringEnabled(false)

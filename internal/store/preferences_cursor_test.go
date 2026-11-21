@@ -25,8 +25,13 @@ func TestCursorOptInDefaultsAndProviderLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !back.CursorMonitoringEnabled || back.SelectedProvider != ProviderCursor || len(back.StatusBarSelection()) != 2 || len(back.FloatingSelection()) != 3 {
+	if !back.CursorMonitoringEnabled || back.SelectedProvider != ProviderCursor || len(back.StatusBarSelection()) != 2 || len(back.FloatingSelection()) != 4 {
 		t.Fatal("Cursor preference or display bounds lost")
+	}
+	back.FloatingWindow.Providers = append([]Provider{ProviderDevin, ProviderDroid}, DisplayProviders()...)
+	back.FloatingWindow.normalize()
+	if !reflect.DeepEqual(back.FloatingSelection(), DisplayProviders()) {
+		t.Fatal("floating window dropped a display provider")
 	}
 }
 

@@ -32,6 +32,11 @@ func panelBody(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap ru
 		panelCursorQuota(c, l, prefs, snap.Cursor, acts, &first, state)
 		return
 	}
+	if p := prefs.SelectedProvider; p == store.ProviderDroid || p == store.ProviderDevin {
+		first := true
+		panelQuotaOnly(c, l, prefs, snap, p, acts, &first, state)
+		return
+	}
 	snap.Provider = prefs.SelectedProvider
 	snap.Codex = providerView(l, snap, prefs.APICostSummaryRange)
 	local := localProvider(prefs.SelectedProvider)
@@ -141,6 +146,8 @@ func sectionRefreshing(snap runway.Snapshot, section runway.Section) bool {
 		return snap.Copilot.Refreshing
 	case store.ProviderCursor:
 		return snap.Cursor.Refreshing
+	case store.ProviderDroid, store.ProviderDevin:
+		return quotaOnlyState(snap, snap.Provider).Refreshing
 	case store.ProviderGrok:
 		return snap.Grok.Refreshing
 	case store.ProviderClaude:

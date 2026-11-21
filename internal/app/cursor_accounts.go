@@ -19,5 +19,5 @@ func renderCursorAccountsPage(c *ui.Context, u *settingsUI, f *accountForm, rt *
 
 func cursorAccountTabs(c *ui.Context, l l10n.Localizer, selected *int, busy bool) bool {
 	providers := store.DisplayProviders()
-	return providerTabsOf(c, providers, selected, busy, providerLabels(l, providers)...)
+	return providerTabsOf(c, providers, selected, busy, providerTabLabelsSelected(l, providers, *selected)...)
 }
