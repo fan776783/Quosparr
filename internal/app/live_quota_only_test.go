@@ -633,6 +633,7 @@ func TestPanelQuotaOnlyRendersAPICostSection(t *testing.T) {
 }
 
 func TestQuotaOnlyBridgeCostSummaryRangeAndToggle(t *testing.T) {
+	pinQuotaOnlyLocalUTC(t)
 	home := t.TempDir()
 	dir := filepath.Join(home, ".factory")
 	writeDroidLogin(t, dir, "ada@example.com", quotaOnlyNow.Add(time.Hour))
@@ -748,6 +749,7 @@ func TestForkPanelActionsWrapQueryCache(t *testing.T) {
 }
 
 func TestQuotaOnlyBridgeTodayCostFallback(t *testing.T) {
+	pinQuotaOnlyLocalUTC(t)
 	home := t.TempDir()
 	dir := filepath.Join(home, ".factory")
 	writeDroidLogin(t, dir, "ada@example.com", quotaOnlyNow.Add(time.Hour))
@@ -929,4 +931,13 @@ func TestQuotaOnlyBridgeSpeedScanToggleAndRefreshSection(t *testing.T) {
 	before = scans.Load()
 	refreshSection(svc, runway.SectionSpeed)
 	waitSpeedCond(t, "droid speed section refresh", func() bool { return scans.Load() > before })
+}
+
+// pinQuotaOnlyLocalUTC makes the local calendar day of the cost windows match
+// the UTC fixture times on every runner.
+func pinQuotaOnlyLocalUTC(t *testing.T) {
+	t.Helper()
+	previous := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = previous })
 }
