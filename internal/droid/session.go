@@ -38,8 +38,10 @@ type SessionScanner struct {
 }
 
 type sessionSettingsDoc struct {
-	Model      string `json:"model"`
-	TokenUsage *struct {
+	Model                 string  `json:"model"`
+	ReasoningEffort       string  `json:"reasoningEffort"`
+	AssistantActiveTimeMs float64 `json:"assistantActiveTimeMs"`
+	TokenUsage            *struct {
 		InputTokens         int64 `json:"inputTokens"`
 		OutputTokens        int64 `json:"outputTokens"`
 		CacheCreationTokens int64 `json:"cacheCreationTokens"`

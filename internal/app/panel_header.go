@@ -187,13 +187,7 @@ func panelHeaderButtons(c *ui.Context, a *App, l l10n.Localizer, prefs store.Pre
 // refreshEverything is the header refresh: all sections, plus the open
 // cost query or reaction when a page that shows them is open.
 func refreshEverything(a *App, acts PanelActions) {
-	if a.settings.Prefs().SelectedProvider.QuotaOnly() {
-		if acts.RefreshSection != nil {
-			acts.RefreshSection(runway.SectionQuota)
-		}
-		if a.panelState.detail == store.ModuleAPICost && a.panelState.cost.query != nil {
-			a.startCostQuery(*a.panelState.cost.query, acts)
-		}
+	if forkRefreshEverything(a, acts) {
 		return
 	}
 	acts.Refresh()

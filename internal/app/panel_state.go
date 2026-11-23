@@ -32,6 +32,7 @@ type panelState struct {
 	// syncSkills and refreshSkills scan the skills; panelView points them at App.
 	syncSkills    func(PanelActions)
 	refreshSkills func(PanelActions)
+	forkCache     panelCacheQueryState // quota-only Current-cycle fallback of the cache summary
 }
 
 // detailAccounts is the multi-account page. It is not a module, but it is

@@ -20,8 +20,8 @@ const (
 	KeyDroidLoginRejected     Key = "droid.loginRejected"
 	KeyDroidNoSubscription    Key = "droid.noSubscription"
 	KeyDroidStandard          Key = "droid.standard"
-	KeyDroidCore              Key = "droid.core"
 	KeyDroidExtraUsage        Key = "droid.extraUsage"
+	KeyDroidSpeedInfo         Key = "droid.speedInfo"
 	KeyDevinNotInstalled      Key = "devin.notInstalled"
 	KeyDevinInstallHint       Key = "devin.installHint"
 	KeyDevinOpenInstallGuide  Key = "devin.openGuide"
@@ -36,6 +36,7 @@ const (
 	KeyQuotaOnlyParseFailed   Key = "quotaOnly.parseFailed"
 	KeyQuotaOnlyRefreshFailed Key = "quotaOnly.failed"
 	KeyQuotaOnlyDetails       Key = "quotaOnly.details"
+	KeyQuotaOnlyCycleFallback Key = "quotaOnly.cycleFallback"
 )
 
 var quotaOnlyKeys = []Key{
@@ -54,8 +55,8 @@ var quotaOnlyKeys = []Key{
 	KeyDroidLoginRejected,
 	KeyDroidNoSubscription,
 	KeyDroidStandard,
-	KeyDroidCore,
 	KeyDroidExtraUsage,
+	KeyDroidSpeedInfo,
 	KeyDevinNotInstalled,
 	KeyDevinInstallHint,
 	KeyDevinOpenInstallGuide,
@@ -70,6 +71,7 @@ var quotaOnlyKeys = []Key{
 	KeyQuotaOnlyParseFailed,
 	KeyQuotaOnlyRefreshFailed,
 	KeyQuotaOnlyDetails,
+	KeyQuotaOnlyCycleFallback,
 }
 
 var quotaOnlyTables = map[Language]map[Key]string{
@@ -89,8 +91,8 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyDroidLoginRejected:     "Factory rejected the Droid login; sign in again in droid",
 		KeyDroidNoSubscription:    "This Factory account has no active subscription",
 		KeyDroidStandard:          "Standard",
-		KeyDroidCore:              "Core",
 		KeyDroidExtraUsage:        "Extra usage balance",
+		KeyDroidSpeedInfo:         "For Droid, output speed is each session's output tokens divided by the assistant's active time, so it includes the wait for the first token.",
 		KeyDevinNotInstalled:      "The Devin CLI is not installed",
 		KeyDevinInstallHint:       "Install the Devin CLI (Install Devin CLI in Devin Desktop) and run devin auth login to view the Devin quota.",
 		KeyDevinOpenInstallGuide:  "Open Devin CLI guide",
@@ -105,6 +107,7 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyQuotaOnlyParseFailed:   "The quota response could not be read",
 		KeyQuotaOnlyRefreshFailed: "Could not read the quota",
 		KeyQuotaOnlyDetails:       "Quota details",
+		KeyQuotaOnlyCycleFallback: "No usage today; showing the current cycle.",
 	},
 	SimplifiedChinese: {
 		KeyProviderDroid:          "Droid",
@@ -122,8 +125,8 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyDroidLoginRejected:     "Factory 拒绝了 Droid 登录，请在 droid 中重新登录",
 		KeyDroidNoSubscription:    "此 Factory 账号没有有效订阅",
 		KeyDroidStandard:          "Standard",
-		KeyDroidCore:              "Core",
 		KeyDroidExtraUsage:        "超额用量余额",
+		KeyDroidSpeedInfo:         "对于 Droid，输出速率为每个会话的输出 token 除以助手活跃时间，因此包含首字等待时间。",
 		KeyDevinNotInstalled:      "未安装 Devin CLI",
 		KeyDevinInstallHint:       "请安装 Devin CLI（Devin Desktop 中的 Install Devin CLI）并运行 devin auth login，以查看 Devin 额度。",
 		KeyDevinOpenInstallGuide:  "打开 Devin CLI 指南",
@@ -138,6 +141,7 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyQuotaOnlyParseFailed:   "无法解析额度响应",
 		KeyQuotaOnlyRefreshFailed: "额度读取失败",
 		KeyQuotaOnlyDetails:       "额度详情",
+		KeyQuotaOnlyCycleFallback: "今日暂无用量，显示本周期",
 	},
 	TraditionalChinese: {
 		KeyProviderDroid:          "Droid",
@@ -155,8 +159,8 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyDroidLoginRejected:     "Factory 拒絕了 Droid 登入，請在 droid 中重新登入",
 		KeyDroidNoSubscription:    "此 Factory 帳號沒有有效訂閱",
 		KeyDroidStandard:          "Standard",
-		KeyDroidCore:              "Core",
 		KeyDroidExtraUsage:        "超額用量餘額",
+		KeyDroidSpeedInfo:         "對於 Droid，輸出速率為每個工作階段的輸出 token 除以助手活躍時間，因此包含首字等待時間。",
 		KeyDevinNotInstalled:      "未安裝 Devin CLI",
 		KeyDevinInstallHint:       "請安裝 Devin CLI（Devin Desktop 中的 Install Devin CLI）並執行 devin auth login，以查看 Devin 額度。",
 		KeyDevinOpenInstallGuide:  "開啟 Devin CLI 指南",
@@ -171,6 +175,7 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyQuotaOnlyParseFailed:   "無法解析額度回應",
 		KeyQuotaOnlyRefreshFailed: "額度讀取失敗",
 		KeyQuotaOnlyDetails:       "額度詳情",
+		KeyQuotaOnlyCycleFallback: "今日暫無用量，顯示本週期",
 	},
 	Korean: {
 		KeyProviderDroid:          "Droid",
@@ -188,8 +193,8 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyDroidLoginRejected:     "Factory가 Droid 로그인을 거부했습니다. droid에서 다시 로그인하세요",
 		KeyDroidNoSubscription:    "이 Factory 계정에는 활성 구독이 없습니다",
 		KeyDroidStandard:          "Standard",
-		KeyDroidCore:              "Core",
 		KeyDroidExtraUsage:        "추가 사용량 잔액",
+		KeyDroidSpeedInfo:         "Droid의 출력 속도는 각 세션의 출력 토큰을 어시스턴트 활성 시간으로 나눈 값이며, 첫 토큰 대기 시간이 포함됩니다.",
 		KeyDevinNotInstalled:      "Devin CLI가 설치되어 있지 않습니다",
 		KeyDevinInstallHint:       "Devin CLI를 설치하고(Devin Desktop의 Install Devin CLI) devin auth login을 실행하면 Devin 할당량을 볼 수 있습니다.",
 		KeyDevinOpenInstallGuide:  "Devin CLI 안내 열기",
@@ -204,6 +209,7 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyQuotaOnlyParseFailed:   "할당량 응답을 읽지 못했습니다",
 		KeyQuotaOnlyRefreshFailed: "할당량을 읽지 못했습니다",
 		KeyQuotaOnlyDetails:       "할당량 세부 정보",
+		KeyQuotaOnlyCycleFallback: "오늘 사용량이 없어 현재 주기를 표시합니다.",
 	},
 	Japanese: {
 		KeyProviderDroid:          "Droid",
@@ -221,8 +227,8 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyDroidLoginRejected:     "Factory が Droid のログインを拒否しました。droid で再ログインしてください",
 		KeyDroidNoSubscription:    "この Factory アカウントには有効なサブスクリプションがありません",
 		KeyDroidStandard:          "Standard",
-		KeyDroidCore:              "Core",
 		KeyDroidExtraUsage:        "追加利用の残高",
+		KeyDroidSpeedInfo:         "Droid の出力速度は、各セッションの出力トークン数をアシスタントのアクティブ時間で割った値のため、最初のトークンまでの待ち時間を含みます。",
 		KeyDevinNotInstalled:      "Devin CLI がインストールされていません",
 		KeyDevinInstallHint:       "Devin CLI をインストールし（Devin Desktop の Install Devin CLI）、devin auth login を実行すると Devin のクォータを確認できます。",
 		KeyDevinOpenInstallGuide:  "Devin CLI のガイドを開く",
@@ -237,6 +243,7 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyQuotaOnlyParseFailed:   "クォータの応答を読み取れません",
 		KeyQuotaOnlyRefreshFailed: "クォータを取得できませんでした",
 		KeyQuotaOnlyDetails:       "クォータの詳細",
+		KeyQuotaOnlyCycleFallback: "今日の使用量がないため、今の周期を表示しています。",
 	},
 	Russian: {
 		KeyProviderDroid:          "Droid",
@@ -254,8 +261,8 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyDroidLoginRejected:     "Factory отклонил вход Droid; войдите снова в droid",
 		KeyDroidNoSubscription:    "У этого аккаунта Factory нет активной подписки",
 		KeyDroidStandard:          "Standard",
-		KeyDroidCore:              "Core",
 		KeyDroidExtraUsage:        "Баланс доп. использования",
+		KeyDroidSpeedInfo:         "Для Droid скорость вывода рассчитывается как отношение выходных токенов сессии к активному времени ассистента и поэтому включает ожидание первого токена.",
 		KeyDevinNotInstalled:      "Devin CLI не установлен",
 		KeyDevinInstallHint:       "Установите Devin CLI (в Devin Desktop: Install Devin CLI) и выполните devin auth login, чтобы видеть квоту Devin.",
 		KeyDevinOpenInstallGuide:  "Открыть руководство Devin CLI",
@@ -270,6 +277,7 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyQuotaOnlyParseFailed:   "Не удалось разобрать ответ о квоте",
 		KeyQuotaOnlyRefreshFailed: "Не удалось получить квоту",
 		KeyQuotaOnlyDetails:       "Подробности квоты",
+		KeyQuotaOnlyCycleFallback: "Сегодня нет использования; показан текущий цикл.",
 	},
 	French: {
 		KeyProviderDroid:          "Droid",
@@ -287,8 +295,8 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyDroidLoginRejected:     "Factory a refusé la connexion Droid ; reconnectez-vous dans droid",
 		KeyDroidNoSubscription:    "Ce compte Factory n’a pas d’abonnement actif",
 		KeyDroidStandard:          "Standard",
-		KeyDroidCore:              "Core",
 		KeyDroidExtraUsage:        "Solde d’usage supplémentaire",
+		KeyDroidSpeedInfo:         "Pour Droid, la vitesse de sortie correspond aux jetons produits par session divisés par le temps d’activité de l’assistant ; elle inclut donc l’attente du premier jeton.",
 		KeyDevinNotInstalled:      "La CLI Devin n’est pas installée",
 		KeyDevinInstallHint:       "Installez la CLI Devin (Install Devin CLI dans Devin Desktop) et lancez devin auth login pour voir le quota Devin.",
 		KeyDevinOpenInstallGuide:  "Ouvrir le guide de la CLI Devin",
@@ -303,5 +311,6 @@ var quotaOnlyTables = map[Language]map[Key]string{
 		KeyQuotaOnlyParseFailed:   "Impossible de lire la réponse du quota",
 		KeyQuotaOnlyRefreshFailed: "Impossible de lire le quota",
 		KeyQuotaOnlyDetails:       "Détails du quota",
+		KeyQuotaOnlyCycleFallback: "Aucune utilisation aujourd’hui ; affichage du cycle en cours.",
 	},
 }

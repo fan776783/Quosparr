@@ -1,12 +1,15 @@
 package app
 
 import (
+	"context"
 	"time"
 
+	"github.com/licoy/quosparr/internal/cachehit"
 	"github.com/licoy/quosparr/internal/l10n"
 	"github.com/licoy/quosparr/internal/pricing"
 	"github.com/licoy/quosparr/internal/runway"
 	"github.com/licoy/quosparr/internal/store"
+	"github.com/licoy/quosparr/internal/usage"
 )
 
 // forkRuntime owns the quota-only bridges. Keep their lifecycle and UI actions
@@ -70,9 +73,15 @@ func (rt *liveApp) setForkPreferences(p store.Preferences) {
 	if rt.cursorB != nil {
 		rt.cursorB.setPreferences(p, rt.langs)
 	}
-	for _, b := range []*quotaOnlyBridge{rt.droidB, rt.devinB} {
-		if b != nil {
-			b.setPreferences(p, rt.langs)
+	for _, item := range []struct {
+		p store.Provider
+		b *quotaOnlyBridge
+	}{{store.ProviderDroid, rt.droidB}, {store.ProviderDevin, rt.devinB}} {
+		if item.b == nil {
+			continue
+		}
+		if item.b.applyPreferences(p, rt.langs) && p.SelectedProvider == item.p && p.ShowsCostSummary && p.MonitoringEnabled(item.p) && rt.svc != nil {
+			rt.svc.RefreshQuotaOnlyLocal(item.p)
 		}
 	}
 }
@@ -95,6 +104,96 @@ func (rt *liveApp) addForkPanelActions(actions *PanelActions, s *Settings) {
 			s.SetCursorMonitoringEnabled(on)
 		}
 	}
+	base := actions.QueryCost
+	actions.QueryCost = func(ctx context.Context, provider store.Provider, q CostQuery) (usage.Summary, error) {
+		if !provider.QuotaOnly() {
+			if base == nil {
+				return usage.Summary{}, errDetailUnavailable
+			}
+			return base(ctx, provider, q)
+		}
+		return rt.queryForkDetailCost(ctx, provider, q)
+	}
+	baseCache := actions.QueryCache
+	actions.QueryCache = func(ctx context.Context, provider store.Provider, q CostQuery) (cachehit.Report, error) {
+		if !provider.QuotaOnly() {
+			if baseCache == nil {
+				return cachehit.Report{}, errInvalidCacheProvider
+			}
+			return baseCache(ctx, provider, q)
+		}
+		return rt.queryForkCache(ctx, provider, q)
+	}
+}
+
+func (rt *liveApp) queryForkCache(ctx context.Context, provider store.Provider, q CostQuery) (cachehit.Report, error) {
+	var b *quotaOnlyBridge
+	switch provider {
+	case store.ProviderDroid:
+		b = rt.droidB
+	case store.ProviderDevin:
+		b = rt.devinB
+	default:
+		return cachehit.Report{}, errInvalidCacheProvider
+	}
+	if b == nil {
+		return cachehit.Report{}, errDetailUnavailable
+	}
+	now := time.Now()
+	var (
+		window usage.Window
+		err    error
+	)
+	switch {
+	case q.Custom != nil:
+		window, err = validCacheWindow(q.Custom.Window)
+	case q.Range.Valid():
+		window, err = validCacheWindow(quotaOnlyCostWindow(provider, q.Range, b.costDetail(), now))
+	default:
+		return cachehit.Report{}, errInvalidCostRange
+	}
+	if err != nil {
+		return cachehit.Report{}, err
+	}
+	return b.scanSpeedCache(ctx, window, now)
+}
+
+func (rt *liveApp) queryForkDetailCost(ctx context.Context, provider store.Provider, q CostQuery) (result usage.Summary, err error) {
+	version := rt.pricingVersion(provider)
+	defer func() {
+		if version != rt.pricingVersion(provider) {
+			result = usage.Summary{}
+			err = context.Canceled
+		}
+	}()
+	now := time.Now()
+	switch provider {
+	case store.ProviderDroid:
+		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDroid, rt.droidB, q, now)
+	case store.ProviderDevin:
+		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDevin, rt.devinB, q, now)
+	default:
+		return usage.Summary{}, errDetailUnavailable
+	}
+}
+
+func (rt *liveApp) queryQuotaOnlyDetailCost(ctx context.Context, provider store.Provider, b *quotaOnlyBridge, q CostQuery, now time.Time) (usage.Summary, error) {
+	if b == nil {
+		return usage.Summary{}, errDetailUnavailable
+	}
+	var window usage.Window
+	switch {
+	case q.Custom != nil:
+		window = q.Custom.Window
+	case q.Range.Valid():
+		window = quotaOnlyCostWindow(provider, q.Range, b.costDetail(), now)
+	default:
+		return usage.Summary{}, errInvalidCostRange
+	}
+	if !window.End.After(window.Start) {
+		return usage.Summary{}, errInvalidCostRange
+	}
+	return b.scanCostWindow(ctx, window, now, nil)
 }
 
 func refreshForkSection(s *runway.Service, sec runway.Section) bool {
@@ -111,7 +210,7 @@ func refreshForkSection(s *runway.Service, sec runway.Section) bool {
 		switch sec {
 		case runway.SectionQuota:
 			s.RefreshQuotaOnly(s.Preferences().SelectedProvider, true)
-		case runway.SectionAPICost:
+		case runway.SectionAPICost, runway.SectionSpeed:
 			s.RefreshQuotaOnlyLocal(s.Preferences().SelectedProvider)
 		}
 	default:

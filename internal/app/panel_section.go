@@ -33,8 +33,7 @@ func panelBody(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap ru
 		return
 	}
 	if p := prefs.SelectedProvider; p == store.ProviderDroid || p == store.ProviderDevin {
-		first := true
-		panelQuotaOnly(c, l, prefs, snap, p, acts, &first, state)
+		panelQuotaOnlyBody(c, l, prefs, snap, p, acts, state)
 		return
 	}
 	snap.Provider = prefs.SelectedProvider

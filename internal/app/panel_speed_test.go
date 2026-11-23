@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -284,6 +285,85 @@ func TestProviderSpeedErrorsFollowTheSelectedProvider(t *testing.T) {
 	snap.Provider = store.ProviderClaude
 	if got := providerView(l, snap, store.CostRangeCurrent).SpeedError; got != snap.Claude.SpeedError {
 		t.Fatalf("Claude speed error = %q", got)
+	}
+	snap.Droid.Speed = speedFixture()
+	snap.Droid.SpeedError = "droid speed unreadable"
+	snap.Provider = store.ProviderDroid
+	if got := providerView(l, snap, store.CostRangeCurrent); got.Speed != snap.Droid.Speed || got.SpeedError != snap.Droid.SpeedError {
+		t.Fatalf("Droid providerView = %+v", got)
+	}
+	snap.Devin.Speed = speedFixture()
+	snap.Devin.SpeedError = "devin speed unreadable"
+	snap.Provider = store.ProviderDevin
+	if got := providerView(l, snap, store.CostRangeCurrent); got.Speed != snap.Devin.Speed || got.SpeedError != snap.Devin.SpeedError {
+		t.Fatalf("Devin providerView = %+v", got)
+	}
+}
+
+func TestPanelSpeedDroidAndDevinAndDroidInfoNote(t *testing.T) {
+	l := l10n.New(l10n.English)
+	droidNote := l.Text(l10n.KeyDroidSpeedInfo)
+	rNoTTFT := speedFixture()
+	rNoTTFT.NoTTFT = true
+	if strings.Contains(strings.Join(speedInfo(l, rNoTTFT), "\n"), droidNote) {
+		t.Fatal("generic speedInfo unexpectedly contains KeyDroidSpeedInfo")
+	}
+
+	snap := quotaOnlyFixture()
+	snap.Droid.Speed = rNoTTFT
+	snap.Devin.Availability = runway.QuotaOnlyReady
+	snap.Devin.Meters = []runway.Meter{{Title: "Daily", RemainingPercent: 60, UsedPercent: 40, Source: runway.SourceStandard}}
+	snap.Devin.Speed = speedFixture()
+
+	a, tt := newPanel(t, func(p *store.Preferences) {
+		enableQuotaOnly(p)
+		p.SelectedProvider = store.ProviderDroid
+		p.ShowsSpeedAnalysis = true
+	}, snap, PanelActions{})
+	if !tt.HasText(tx(l, xSpeedTitle)) || !hasExact(tt, "36 tok/s") || hasExact(tt, tx(l, xSpeedTTFT)) {
+		t.Fatalf("Droid speed card missing or shows TTFT; texts %q", tt.Texts())
+	}
+	title, ok := tt.Find(tx(l, xSpeedTitle))
+	if !ok {
+		t.Fatalf("Droid speed title missing; texts %q", tt.Texts())
+	}
+	tt.ClickAt(panelWidth-16-24-6-12, title.Y+title.H/2)
+	if !tt.HasText(droidNote) {
+		t.Fatalf("Droid speed info popover missing KeyDroidSpeedInfo; texts %q", tt.Texts())
+	}
+	if err := tt.Click(l.Text(l10n.KeyOk)); err != nil {
+		t.Fatal(err)
+	}
+	a.panelState.detail = store.ModuleSpeedAnalysis
+	tt.Frame()
+	if !tt.HasText(speedTestTitle) || hasExact(tt, "P50") {
+		t.Fatalf("Droid speed detail missing session or shows P50; texts %q", tt.Texts())
+	}
+
+	// Devin shows TTFT and its speed info popover does not include the Droid note.
+	aDevin, ttDevin := newPanel(t, func(p *store.Preferences) {
+		enableQuotaOnly(p)
+		p.SelectedProvider = store.ProviderDevin
+		p.ShowsSpeedAnalysis = true
+	}, snap, PanelActions{})
+	if !ttDevin.HasText(tx(l, xSpeedTitle)) || !hasExact(ttDevin, "2.4s") {
+		t.Fatalf("Devin speed card missing; texts %q", ttDevin.Texts())
+	}
+	devinTitle, ok := ttDevin.Find(tx(l, xSpeedTitle))
+	if !ok {
+		t.Fatalf("Devin speed title missing; texts %q", ttDevin.Texts())
+	}
+	ttDevin.ClickAt(panelWidth-16-24-6-12, devinTitle.Y+devinTitle.H/2)
+	if ttDevin.HasText(droidNote) {
+		t.Fatalf("Devin speed info popover unexpectedly contains KeyDroidSpeedInfo; texts %q", ttDevin.Texts())
+	}
+	if err := ttDevin.Click(l.Text(l10n.KeyOk)); err != nil {
+		t.Fatal(err)
+	}
+	aDevin.panelState.detail = store.ModuleSpeedAnalysis
+	ttDevin.Frame()
+	if ttDevin.HasText(droidNote) || !hasExact(ttDevin, "P50") {
+		t.Fatalf("Devin speed detail unexpected note or missing P50; texts %q", ttDevin.Texts())
 	}
 }
 

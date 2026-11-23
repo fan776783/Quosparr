@@ -18,11 +18,13 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/plugins/sqlite"
+	"github.com/licoy/quosparr/internal/cachehit"
 	"github.com/licoy/quosparr/internal/devin"
 	"github.com/licoy/quosparr/internal/droid"
 	"github.com/licoy/quosparr/internal/l10n"
 	"github.com/licoy/quosparr/internal/pricing"
 	"github.com/licoy/quosparr/internal/runway"
+	"github.com/licoy/quosparr/internal/speed"
 	"github.com/licoy/quosparr/internal/sqliteruntime"
 	"github.com/licoy/quosparr/internal/store"
 	"github.com/licoy/quosparr/internal/usage"
@@ -91,12 +93,12 @@ func TestDroidBridgeReadsQuota(t *testing.T) {
 	if st.Availability != runway.QuotaOnlyReady || st.Name != "Ada" || st.Email != "ada@example.com" || st.Plan != "Pro" {
 		t.Fatalf("state %+v", st)
 	}
-	if len(st.Meters) != 3 || st.Meters[0].Title != "Standard · 5-hour" || st.Meters[0].UsedPercent != 23 ||
-		st.Meters[0].Source != runway.SourceStandard || st.Meters[2].Source != runway.SourceModelSpecific || st.Meters[2].Title != "Core · Weekly" {
+	if len(st.Meters) != 2 || st.Meters[0].Title != "Standard · 5-hour" || st.Meters[0].UsedPercent != 23 ||
+		st.Meters[0].Source != runway.SourceStandard || st.Meters[1].Title != "Standard · Weekly" || st.Meters[1].Source != runway.SourceStandard {
 		t.Fatalf("meters %+v", st.Meters)
 	}
 	if !st.Meters[0].ResetsAt.Equal(time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)) ||
-		!st.Meters[2].ResetsAt.Equal(time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)) {
+		!st.Meters[1].ResetsAt.Equal(time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("resets %+v", st.Meters)
 	}
 	if len(st.Details) != 2 || st.Details[1].Value != "$12.50" {
@@ -529,8 +531,11 @@ func TestDevinBridgeCostCacheAndDetailQuery(t *testing.T) {
 			return db
 		}(),
 	}
+	var actions PanelActions
+	installDetailActions(rt, &actions)
+	rt.addForkPanelActions(&actions, nil)
 	for _, r := range store.CostRanges() {
-		sum, err := rt.queryDetailCost(context.Background(), store.ProviderDevin, CostQuery{Range: r})
+		sum, err := actions.QueryCost(context.Background(), store.ProviderDevin, CostQuery{Range: r})
 		if err != nil {
 			t.Fatalf("devin range %s: %v", r, err)
 		}
@@ -542,14 +547,41 @@ func TestDevinBridgeCostCacheAndDetailQuery(t *testing.T) {
 	if !ok {
 		t.Fatal("invalid custom range")
 	}
-	if sum, err := rt.queryDetailCost(context.Background(), store.ProviderDevin, CostQuery{Custom: &custom}); err != nil || sum.Totals.Turns != 1 {
+	if sum, err := actions.QueryCost(context.Background(), store.ProviderDevin, CostQuery{Custom: &custom}); err != nil || sum.Totals.Turns != 1 {
 		t.Fatalf("devin custom = %+v, %v", sum, err)
 	}
-	if _, err := rt.queryDetailCost(context.Background(), store.ProviderDroid, CostQuery{Range: store.CostRangeToday}); err != nil {
+	if _, err := actions.QueryCost(context.Background(), store.ProviderDroid, CostQuery{Range: store.CostRangeToday}); err != nil {
 		t.Fatalf("droid detail = %v", err)
 	}
-	if _, err := rt.queryDetailCost(context.Background(), store.ProviderCopilot, CostQuery{Range: store.CostRangeToday}); !errors.Is(err, errDetailUnavailable) {
+	if _, err := actions.QueryCost(context.Background(), store.ProviderCopilot, CostQuery{Range: store.CostRangeToday}); !errors.Is(err, errDetailUnavailable) {
 		t.Fatalf("copilot should stay unavailable, got %v", err)
+	}
+}
+
+func TestForkPanelActionsWrapQueryCost(t *testing.T) {
+	snap := testQuotaOnlyPricing(t, "1")
+	db := newDroidBridge(t.TempDir(), quotaOnlyPrefs(), []string{"en"})
+	db.pricingSnapshot = func() pricing.Snapshot { return snap }
+	rt := &liveApp{droidB: db}
+
+	var baseCalls []store.Provider
+	actions := PanelActions{
+		QueryCost: func(_ context.Context, p store.Provider, _ CostQuery) (usage.Summary, error) {
+			baseCalls = append(baseCalls, p)
+			return usage.Summary{Source: usage.SourceLocalSessions}, nil
+		},
+	}
+	rt.addForkPanelActions(&actions, nil)
+
+	if _, err := actions.QueryCost(context.Background(), store.ProviderDroid, CostQuery{Range: store.CostRangeToday}); err != nil {
+		t.Fatalf("droid QueryCost = %v", err)
+	}
+	if _, err := actions.QueryCost(context.Background(), store.ProviderCopilot, CostQuery{Range: store.CostRangeToday}); !errors.Is(err, errDetailUnavailable) {
+		t.Fatalf("copilot QueryCost = %v, want errDetailUnavailable", err)
+	}
+	sum, err := actions.QueryCost(context.Background(), store.ProviderCodex, CostQuery{Range: store.CostRangeToday})
+	if err != nil || sum.Source != usage.SourceLocalSessions || len(baseCalls) != 1 || baseCalls[0] != store.ProviderCodex {
+		t.Fatalf("codex QueryCost = (%+v, %v), baseCalls=%v", sum, err, baseCalls)
 	}
 }
 
@@ -566,10 +598,12 @@ func TestPanelQuotaOnlyRendersAPICostSection(t *testing.T) {
 	a, tt := newPanel(t, func(p *store.Preferences) {
 		enableQuotaOnly(p)
 		p.SelectedProvider = store.ProviderDroid
+		p.ShowsSpeedAnalysis = false
+		p.ShowsCacheAnalysis = false
 		p.ShowsCostSummary = true
 	}, snap, PanelActions{})
-	if tt.HasText(l.Text(l10n.KeyApiCost)) {
-		t.Fatalf("standalone API cost section should not be shown for Droid: %q", tt.Texts())
+	if !tt.HasText(l.Text(l10n.KeyApiCost)) {
+		t.Fatalf("standalone API cost section should be shown for Droid: %q", tt.Texts())
 	}
 	wantLine := "$12.50 / $50.00 · " + l.Text(l10n.KeyCursorEstimated)
 	if !tt.HasText(wantLine) || !tt.HasText(l.Text(l10n.KeyShowDetails)) {
@@ -589,9 +623,310 @@ func TestPanelQuotaOnlyRendersAPICostSection(t *testing.T) {
 	_, hidden := newPanel(t, func(p *store.Preferences) {
 		enableQuotaOnly(p)
 		p.SelectedProvider = store.ProviderDroid
+		p.ShowsSpeedAnalysis = false
+		p.ShowsCacheAnalysis = false
 		p.ShowsCostSummary = false
 	}, snap, PanelActions{})
-	if hidden.HasText(wantLine) || hidden.HasText(l.Text(l10n.KeyShowDetails)) {
-		t.Fatalf("window cost shown while disabled: %q", hidden.Texts())
+	if hidden.HasText(wantLine) || hidden.HasText(l.Text(l10n.KeyApiCost)) || hidden.HasText(l.Text(l10n.KeyShowDetails)) {
+		t.Fatalf("cost shown while disabled: %q", hidden.Texts())
 	}
+}
+
+func TestQuotaOnlyBridgeCostSummaryRangeAndToggle(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".factory")
+	writeDroidLogin(t, dir, "ada@example.com", quotaOnlyNow.Add(time.Hour))
+	sessionsDir := filepath.Join(dir, "sessions")
+	projDir := filepath.Join(sessionsDir, "my-app")
+	if err := os.MkdirAll(projDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeSess := func(name string, age time.Duration) {
+		p := filepath.Join(projDir, name+".settings.json")
+		if err := os.WriteFile(p, []byte(`{"model":"kimi-k3","tokenUsage":{"inputTokens":1000000,"outputTokens":100000}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		mt := quotaOnlyNow.Add(-age)
+		if err := os.Chtimes(p, mt, mt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeSess("today", time.Hour)
+	writeSess("this-week", 24*time.Hour)
+
+	limitsBody := `{"hasActiveSubscription":true,"limits":{"standard":{"weekly":{"usedPercent":40,"windowEnd":"2026-11-26T00:00:00Z"}}}}`
+	b := droidTestBridge(t, dir, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(limitsBody))
+	})
+	b.sessionsDir = sessionsDir
+	snap := testQuotaOnlyPricing(t, "1")
+	b.pricingSnapshot = func() pricing.Snapshot { return snap }
+
+	p := quotaOnlyPrefs()
+	p.ShowsCostSummary = true
+	p.ShowsSpeedAnalysis = false
+	p.APICostSummaryRange = store.CostRangeCurrent
+	b.setPreferences(p, []string{"en"})
+
+	if err := b.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	st := b.State(quotaOnlyNow)
+	if st.Cost == nil || st.Cost.EstimatedUSD == nil || st.Cost.EstimatedUSD.String() != "2.8" {
+		t.Fatalf("current cost = %+v, want $2.80", st.Cost)
+	}
+
+	// Switching APICostSummaryRange to Today invalidates old Cost and recomputes on RefreshLocal.
+	pToday := p.Clone()
+	pToday.APICostSummaryRange = store.CostRangeToday
+	b.setPreferences(pToday, []string{"en"})
+	if got := b.State(quotaOnlyNow).Cost; got != nil {
+		t.Fatalf("changing costRange did not clear stale Cost: %+v", got)
+	}
+	if err := b.RefreshLocal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	stToday := b.State(quotaOnlyNow)
+	if stToday.Cost == nil || stToday.Cost.EstimatedUSD == nil || stToday.Cost.EstimatedUSD.String() != "1.4" {
+		t.Fatalf("today cost = %+v, want $1.40", stToday.Cost)
+	}
+
+	// Re-rendering on language switch keeps Cost.
+	zh := pToday.Clone()
+	zh.Language = store.LanguageSimplifiedChinese
+	b.setPreferences(zh, nil)
+	if got := b.State(quotaOnlyNow).Cost; got == nil || got.EstimatedUSD == nil || got.EstimatedUSD.String() != "1.4" {
+		t.Fatalf("language switch lost Cost: %+v", got)
+	}
+
+	// Disabling ShowsCostSummary clears Cost.
+	off := zh.Clone()
+	off.ShowsCostSummary = false
+	b.setPreferences(off, nil)
+	if got := b.State(quotaOnlyNow).Cost; got != nil {
+		t.Fatalf("disabling ShowsCostSummary did not clear Cost: %+v", got)
+	}
+}
+
+func TestForkPanelActionsWrapQueryCache(t *testing.T) {
+	droidDir := t.TempDir()
+	devinDir := t.TempDir()
+	db := newDroidBridge(droidDir, quotaOnlyPrefs(), []string{"en"})
+	vb := newDevinBridge(devinDir, "test", quotaOnlyPrefs(), []string{"en"})
+	db.cacheScanner = func(_ context.Context, _ usage.Window, _ time.Time) (cachehit.Report, error) {
+		return cachehit.Report{Totals: cachehit.Totals{InputTokens: 100, CachedInputTokens: 90, Samples: 1}}, nil
+	}
+	vb.cacheScanner = func(_ context.Context, _ usage.Window, _ time.Time) (cachehit.Report, error) {
+		return cachehit.Report{Totals: cachehit.Totals{InputTokens: 200, CachedInputTokens: 150, Samples: 1}}, nil
+	}
+	rt := &liveApp{droidB: db, devinB: vb}
+
+	var baseCalls []store.Provider
+	actions := PanelActions{
+		QueryCache: func(_ context.Context, p store.Provider, _ CostQuery) (cachehit.Report, error) {
+			baseCalls = append(baseCalls, p)
+			return cachehit.Report{Totals: cachehit.Totals{InputTokens: 50, CachedInputTokens: 25, Samples: 1}}, nil
+		},
+	}
+	rt.addForkPanelActions(&actions, nil)
+
+	dr, err := actions.QueryCache(context.Background(), store.ProviderDroid, CostQuery{Range: store.CostRangeToday})
+	if err != nil || dr.Totals.CachedInputTokens != 90 {
+		t.Fatalf("droid QueryCache = (%+v, %v)", dr, err)
+	}
+	vr, err := actions.QueryCache(context.Background(), store.ProviderDevin, CostQuery{Range: store.CostRangeToday})
+	if err != nil || vr.Totals.CachedInputTokens != 150 {
+		t.Fatalf("devin QueryCache = (%+v, %v)", vr, err)
+	}
+	if _, err := actions.QueryCache(context.Background(), store.ProviderCopilot, CostQuery{Range: store.CostRangeToday}); !errors.Is(err, errInvalidCacheProvider) {
+		t.Fatalf("copilot QueryCache = %v, want errInvalidCacheProvider", err)
+	}
+	cr, err := actions.QueryCache(context.Background(), store.ProviderCodex, CostQuery{Range: store.CostRangeToday})
+	if err != nil || cr.Totals.CachedInputTokens != 25 || len(baseCalls) != 1 || baseCalls[0] != store.ProviderCodex {
+		t.Fatalf("codex QueryCache = (%+v, %v), baseCalls=%v", cr, err, baseCalls)
+	}
+}
+
+func TestQuotaOnlyBridgeTodayCostFallback(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".factory")
+	writeDroidLogin(t, dir, "ada@example.com", quotaOnlyNow.Add(time.Hour))
+	sessionsDir := filepath.Join(dir, "sessions")
+	projDir := filepath.Join(sessionsDir, "my-app")
+	if err := os.MkdirAll(projDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeSess := func(name string, age time.Duration) {
+		p := filepath.Join(projDir, name+".settings.json")
+		if err := os.WriteFile(p, []byte(`{"model":"kimi-k3","tokenUsage":{"inputTokens":1000000,"outputTokens":100000}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		mt := quotaOnlyNow.Add(-age)
+		if err := os.Chtimes(p, mt, mt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Only a session from yesterday (inside Current weekly window, outside Today).
+	writeSess("yesterday", 24*time.Hour)
+
+	limitsBody := `{"hasActiveSubscription":true,"limits":{"standard":{"weekly":{"usedPercent":40,"windowEnd":"2026-11-26T00:00:00Z"}}}}`
+	b := droidTestBridge(t, dir, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(limitsBody))
+	})
+	b.sessionsDir = sessionsDir
+	snap := testQuotaOnlyPricing(t, "1")
+	b.pricingSnapshot = func() pricing.Snapshot { return snap }
+
+	p := quotaOnlyPrefs()
+	p.ShowsCostSummary = true
+	p.ShowsSpeedAnalysis = false
+	p.APICostSummaryRange = store.CostRangeToday
+	b.setPreferences(p, []string{"en"})
+
+	if err := b.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	st := b.State(quotaOnlyNow)
+	if st.CostRange != store.CostRangeCurrent || st.Cost == nil || !st.Cost.IsDisplayableCost() || st.Cost.EstimatedUSD.String() != "1.4" {
+		t.Fatalf("today empty fallback state = (range=%s, cost=%+v)", st.CostRange, st.Cost)
+	}
+
+	// forkProviderView uses CostRangeCurrent for CostSubtitle.
+	l := l10n.New(l10n.English)
+	viewSnap := quotaOnlyFixture()
+	viewSnap.Provider = store.ProviderDroid
+	viewSnap.Droid = st
+	view, ok := forkProviderView(l, viewSnap, store.CostRangeToday)
+	wantSub := runway.CostSubtitle(l, *st.Cost, store.CostRangeCurrent, time.Now())
+	if !ok || view.DisplayedRange != store.CostRangeCurrent || view.CostSubtitle != wantSub {
+		t.Fatalf("forkProviderView = (range=%s, sub=%q), want (current, %q)", view.DisplayedRange, view.CostSubtitle, wantSub)
+	}
+
+	// When ThisMonth is selected and has no fallback, CostRange stays ThisMonth (tested on empty earlier range? Use today session check next).
+	pMonth := p.Clone()
+	pMonth.APICostSummaryRange = store.CostRangeThisMonth
+	b.setPreferences(pMonth, []string{"en"})
+	if err := b.RefreshLocal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if stMonth := b.State(quotaOnlyNow); stMonth.CostRange != store.CostRangeThisMonth {
+		t.Fatalf("ThisMonth CostRange = %s, want thisMonth", stMonth.CostRange)
+	}
+
+	// Add a session today: Today does NOT fall back to Current.
+	writeSess("today", time.Hour)
+	b.setPreferences(p, []string{"en"})
+	if err := b.RefreshLocal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	stToday := b.State(quotaOnlyNow)
+	if stToday.CostRange != store.CostRangeToday || stToday.Cost == nil || stToday.Cost.EstimatedUSD.String() != "1.4" {
+		t.Fatalf("today with data = (range=%s, cost=%+v)", stToday.CostRange, stToday.Cost)
+	}
+}
+
+func TestDroidMetersIgnoresCorePool(t *testing.T) {
+	lc := l10n.New(l10n.English)
+	limits := droid.Limits{
+		Standard:  droid.Pool{FiveHour: &droid.Window{UsedPercent: 10, EndsAt: quotaOnlyNow.Add(time.Hour)}},
+		Core:      &droid.Pool{Weekly: &droid.Window{UsedPercent: 75, EndsAt: quotaOnlyNow.Add(24 * time.Hour)}},
+		UpdatedAt: quotaOnlyNow,
+	}
+	meters := droidMeters(lc, limits)
+	if len(meters) != 1 || meters[0].Source != runway.SourceStandard || meters[0].Title != "Standard · 5-hour" {
+		t.Fatalf("droidMeters = %+v, want only Standard meter", meters)
+	}
+}
+
+func TestQuotaOnlyBridgeSpeedScanToggleAndRefreshSection(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), ".factory")
+	writeDroidLogin(t, dir, "ada@example.com", quotaOnlyNow.Add(time.Hour))
+	b := droidTestBridge(t, dir, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(droidLimitsBody))
+	})
+	p := quotaOnlyPrefs()
+	p.ShowsCostSummary = false
+	p.ShowsSpeedAnalysis = true
+	b.setPreferences(p, []string{"en"})
+
+	sampleSessions := []speed.Session{{
+		ID: "s1", Title: "Droid session", ProjectName: "proj", UpdatedAt: quotaOnlyNow.Add(-time.Minute),
+		Samples: []speed.Sample{{At: quotaOnlyNow.Add(-time.Minute), Model: "claude-opus-5-5", OutputTokens: 200, Decode: 4 * time.Second}},
+	}}
+	var scanErr error
+	var scans atomic.Int32
+	b.speedScanner = func(context.Context, time.Time) ([]speed.Session, error) {
+		scans.Add(1)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		return sampleSessions, nil
+	}
+
+	// Refresh scans speed and sets NoTTFT for Droid.
+	if err := b.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	st := b.State(quotaOnlyNow)
+	if st.Speed == nil || !st.Speed.NoTTFT || len(st.Speed.Groups) != 1 || st.Speed.Groups[0].OutputTokens != 200 {
+		t.Fatalf("speed state = %+v", st.Speed)
+	}
+
+	// Re-rendering on language switch preserves Speed.
+	zh := p.Clone()
+	zh.Language = store.LanguageSimplifiedChinese
+	b.setPreferences(zh, nil)
+	if got := b.State(quotaOnlyNow); got.Speed == nil || len(got.Speed.Groups) != 1 {
+		t.Fatalf("setPreferences lost Speed: %+v", got.Speed)
+	}
+
+	// Subsequent Refresh re-renders state without losing Speed even before rescan.
+	if err := b.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if b.State(quotaOnlyNow).Speed == nil {
+		t.Fatal("Refresh lost Speed")
+	}
+
+	// Scan error preserves previous Speed and sets SpeedError.
+	scanErr = errors.New("speed read boom")
+	if err := b.RefreshLocal(context.Background()); err == nil {
+		t.Fatal("expected RefreshLocal speed error")
+	}
+	errSt := b.State(quotaOnlyNow)
+	if errSt.Speed == nil || errSt.SpeedError == "" {
+		t.Fatalf("error state = %+v", errSt)
+	}
+
+	// Disabling ShowsSpeedAnalysis clears Speed and SpeedError without scanning.
+	off := zh.Clone()
+	off.ShowsSpeedAnalysis = false
+	b.setPreferences(off, nil)
+	cleared := b.State(quotaOnlyNow)
+	if cleared.Speed != nil || cleared.SpeedError != "" || cleared.Availability != runway.QuotaOnlyReady {
+		t.Fatalf("cleared state = %+v", cleared)
+	}
+	before := scans.Load()
+	if err := b.RefreshLocal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if scans.Load() != before {
+		t.Fatalf("hidden speed was scanned: %d -> %d", before, scans.Load())
+	}
+
+	// RefreshSection(SectionSpeed) routes to RefreshQuotaOnlyLocal via runway.Service.
+	scanErr = nil
+	b.setPreferences(p, []string{"en"})
+	svc := runway.New(runway.Options{
+		Preferences: func() store.Preferences {
+			pr := p.Clone()
+			pr.SelectedProvider = store.ProviderDroid
+			return pr
+		}(),
+		Droid: b,
+	})
+	defer svc.Close()
+	before = scans.Load()
+	refreshSection(svc, runway.SectionSpeed)
+	waitSpeedCond(t, "droid speed section refresh", func() bool { return scans.Load() > before })
 }

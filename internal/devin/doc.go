@@ -42,4 +42,26 @@
 // Messages without metrics or with zero total tokens are skipped. Each
 // counted assistant message increments Turns by 1 and selects any context tier
 // using prompt = input + cache_read + cache_creation.
+//
+// # Speed
+//
+// ScanSpeed reads assistant messages within speed.Window before now from the
+// same temporary SQLite copy, deduplicated by metadata.message_id (falling
+// back to session_id and node_id when message_id is absent). Each message yields
+// one speed.Sample using metadata.generation_model, timestamp
+// metadata.started_generation_at (falling back to metadata.created_at and then
+// message_nodes.created_at), and metadata.metrics.{ttft_ms,total_time_ms,
+// output_tokens}. When ttft_ms is present, TTFT is ttft_ms and Decode is
+// total_time_ms - ttft_ms; when ttft_ms is null, HasTTFT is false and Decode is
+// total_time_ms. Samples are grouped by session with sessions.title, the base
+// name of sessions.working_directory, and UpdatedAt as the latest sample or
+// sessions.last_activity_at, keeping the newest speed.SessionLimit sessions.
+//
+// # Cache Hit
+//
+// ScanCache reads assistant messages in [window.Start, window.End) using the
+// same timestamp and deduplication rules as ScanSpeed. When input_tokens,
+// cache_read_tokens, and cache_creation_tokens are all non-null, input is their
+// sum and cached is cache_read_tokens; when any of the three is null, the
+// message increments MissingSamples across totals, model, and session rows.
 package devin

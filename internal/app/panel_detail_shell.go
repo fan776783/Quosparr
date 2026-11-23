@@ -56,6 +56,9 @@ func (a *App) panelDetailPage(c *ui.Context, l l10n.Localizer, prefs store.Prefe
 // pages keep their toolbar fixed and scroll only their list.
 func (a *App) panelDetailBody(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap runway.Snapshot, acts PanelActions) {
 	snap.Provider = prefs.SelectedProvider
+	if a.forkDetailBody(c, l, prefs, snap) {
+		return
+	}
 	switch m := a.panelState.detail; m {
 	case detailAccounts:
 		a.accountsPage(c, l, prefs, snap, acts)

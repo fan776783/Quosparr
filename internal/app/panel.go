@@ -29,7 +29,7 @@ func (a *App) panelView(c *ui.Context) {
 	acts := a.PanelActions()
 	snap.Provider = prefs.SelectedProvider
 	a.syncPanelAccount(snap, prefs)
-	if a.panel != nil && prefs.ShowsCacheAnalysis && !prefs.SelectedProvider.QuotaOnly() {
+	if a.panel != nil && prefs.ShowsCacheAnalysis && forkSyncsCacheSummary(prefs.SelectedProvider) {
 		a.syncCacheSummary(acts)
 	}
 	a.panelState.setChartStyle = func(s store.ChartStyle) { a.settings.SetTokenUsageChartStyle(s) }

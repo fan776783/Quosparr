@@ -60,12 +60,6 @@ func grokMeterRow(c *ui.Context, l l10n.Localizer, m runway.Meter, primary bool,
 		})
 		return
 	}
-	slimMeterRow(c, l, m, now, nil)
-}
-
-// slimMeterRow is the secondary row of grokMeterRow: title, "N% used" and
-// the used-share bar, then the reset when rs is set and the meter has one.
-func slimMeterRow(c *ui.Context, l l10n.Localizer, m runway.Meter, now time.Time, rs *resetSwitch) {
 	t := c.Theme()
 	ui.Column(c).Gap(6).Padding(0, 0, 0, 8).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -73,12 +67,6 @@ func slimMeterRow(c *ui.Context, l l10n.Localizer, m runway.Meter, now time.Time
 			ui.Text(c, l10n.Format("%d%% %s", m.UsedPercent, l.Text(l10n.KeyUsed))).FontSize(fsCaption).FontWeight(600).FontFeatures("tnum").TextColor(healthInk(t, m.Health)).SingleLine()
 		})
 		usedBar(c, m)
-		if rs != nil && m.HasReset() {
-			ui.Row(c).Children(func() {
-				ui.Spacer(c).Grow(1)
-				resetLine(c, l, "reset", m.ResetsAt, now, *rs)
-			})
-		}
 	})
 }
 

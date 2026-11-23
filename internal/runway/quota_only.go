@@ -4,8 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/licoy/quosparr/internal/cachehit"
 	"github.com/licoy/quosparr/internal/l10n"
+	"github.com/licoy/quosparr/internal/speed"
 	"github.com/licoy/quosparr/internal/store"
+	"github.com/licoy/quosparr/internal/usage"
 	"github.com/licoy/quosparr/internal/usage/decimal"
 )
 
@@ -60,8 +63,15 @@ type QuotaOnlyState struct {
 	// Details are the extra rows of the info popover.
 	Details     []DetailLine
 	WindowCosts []QuotaOnlyWindowCost
-	LastError   string
-	Refreshing  bool
+	Cost        *usage.Summary
+	CostRange   store.CostRange
+	// Speed is the model speed of the recent sessions, nil until read;
+	// SpeedError is the error of its last scan.
+	Speed             *speed.Report
+	SpeedError        string
+	SpeedSessionCache map[string]cachehit.Totals
+	LastError         string
+	Refreshing        bool
 }
 
 // QuotaOnlyProvider follows the lock rules of ClaudeProvider.

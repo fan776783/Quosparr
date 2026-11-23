@@ -54,4 +54,24 @@
 // timestamp is approximated as max(mtime(.settings.json), mtime(.jsonl)).
 // Droid reports only session-level totals without per-call prompt sizes, so
 // models with context tiers are priced at their base Rate; Turns is 0.
+//
+// # Speed
+//
+// ScanSpeed reads each session's .settings.json within speed.Window before now
+// (including "custom:" models). Each session with positive
+// assistantActiveTimeMs and tokenUsage.outputTokens yields one session-level
+// sample where TPS = outputTokens / assistantActiveTimeMs, which includes the
+// wait for the first token and has no TTFT (HasTTFT is false). Reasoning effort
+// comes from reasoningEffort; session title and project working directory come
+// from the first "session_start" line of the sibling .jsonl log, falling back
+// to the project directory name when cwd is absent. Results are sorted newest
+// first and capped at speed.SessionLimit sessions.
+//
+// # Cache Hit
+//
+// ScanCache reads each session's .settings.json whose max mtime falls in
+// [window.Start, window.End) (including "custom:" models). Each session with
+// positive input = inputTokens + cacheReadTokens + cacheCreationTokens counts as
+// one sample with cached = cacheReadTokens; unreadable or malformed files
+// increment UnreadLines.
 package droid
