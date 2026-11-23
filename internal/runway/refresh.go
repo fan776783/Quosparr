@@ -429,6 +429,9 @@ func (s *Service) refreshPanelLocal() {
 	estimateDue := p.ShowsQuotaEstimateSummary && (s.est == nil || !s.now().Before(s.estAt.Add(s.refreshInterval())))
 	s.mu.Unlock()
 	if p.SelectedProvider.QuotaOnly() {
+		if (p.SelectedProvider == store.ProviderDroid || p.SelectedProvider == store.ProviderDevin) && p.ShowsCostSummary && p.MonitoringEnabled(p.SelectedProvider) {
+			s.RefreshQuotaOnlyLocal(p.SelectedProvider)
+		}
 		return
 	}
 	switch p.SelectedProvider {

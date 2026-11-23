@@ -191,6 +191,9 @@ func refreshEverything(a *App, acts PanelActions) {
 		if acts.RefreshSection != nil {
 			acts.RefreshSection(runway.SectionQuota)
 		}
+		if a.panelState.detail == store.ModuleAPICost && a.panelState.cost.query != nil {
+			a.startCostQuery(*a.panelState.cost.query, acts)
+		}
 		return
 	}
 	acts.Refresh()

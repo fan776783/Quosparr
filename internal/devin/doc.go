@@ -29,4 +29,17 @@
 // error "unauthenticated" or "permission_denied", or HTTP 401/403, is
 // ErrUnauthorized. Requests send no cookies, never follow redirects and
 // read at most 1 MiB.
+//
+// # Local Sessions
+//
+// SessionScanner reads <DataDir>/cli/sessions.db through a private temporary
+// copy of the database and its -wal sidecar (via sqliteruntime.WithCopy),
+// never opening or locking the live files written by the Devin CLI. It inspects
+// assistant messages in message_nodes joined with sessions.working_directory,
+// extracting metadata.generation_model, metadata.created_at (falling back to
+// message_nodes.created_at), and metadata.metrics.{input_tokens,output_tokens,
+// cache_read_tokens,cache_creation_tokens} where input_tokens is uncached input.
+// Messages without metrics or with zero total tokens are skipped. Each
+// counted assistant message increments Turns by 1 and selects any context tier
+// using prompt = input + cache_read + cache_creation.
 package devin

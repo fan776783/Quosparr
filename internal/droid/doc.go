@@ -40,4 +40,18 @@
 // that field is decoded and its failure leaves the plan empty without
 // failing the reading. Requests send no cookies, never follow redirects and
 // read at most 1 MiB. 401 and 403 are ErrUnauthorized, 429 ErrRateLimited.
+//
+// # Local Sessions
+//
+// SessionScanner reads <home>/.factory/sessions/<project>/<sessionId>.settings.json
+// read-only (capped at 1 MiB per file; unreadable or malformed files are
+// skipped). Each session carries tokenUsage (the session's own tokens, rather
+// than inclusiveTokenUsage which would double-count sub-agent sessions that
+// write their own settings.json). inputTokens is uncached input and
+// thinkingTokens is already included in outputTokens. Models prefixed with
+// "custom:" are BYOK and excluded from both token totals and API-equivalent
+// cost. Because session .jsonl logs do not carry per-turn usage, a session's
+// timestamp is approximated as max(mtime(.settings.json), mtime(.jsonl)).
+// Droid reports only session-level totals without per-call prompt sizes, so
+// models with context tiers are priced at their base Rate; Turns is 0.
 package droid

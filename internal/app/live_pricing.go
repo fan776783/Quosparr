@@ -10,6 +10,7 @@ import (
 	"github.com/licoy/quosparr/internal/platform"
 	"github.com/licoy/quosparr/internal/pricing"
 	"github.com/licoy/quosparr/internal/store"
+	"github.com/licoy/quosparr/internal/usage"
 )
 
 type livePricing struct {
@@ -27,9 +28,11 @@ type livePricing struct {
 	closed        bool
 	running       int
 	versions      map[string]string
+	vendorVersion string
 	rows          []PricingRow
 	dataVersion   string
 	changed       func(string)
+	vendorChanged func()
 	invalidate    func()
 }
 
@@ -48,6 +51,7 @@ func newLivePricing(home string, p store.Preferences, fetch pricing.Fetcher, now
 	for _, id := range pricingWatched {
 		pstate.versions[id] = m.Snapshot().ProviderVersion(id)
 	}
+	pstate.vendorVersion = usage.VendorPricingVersion("", m.Snapshot())
 	pstate.rows = pricingRows(pricing.Snapshot{}, l10n.ForPreference(string(p.Language), pstate.langs))
 	return pstate
 }
@@ -127,6 +131,8 @@ func (p *livePricing) refresh(ctx context.Context) error {
 	p.prepareRows()
 	snapshot := p.manager.Snapshot()
 	var changed []string
+	vendorVer := usage.VendorPricingVersion("", snapshot)
+	vendorUpdated := false
 	p.mu.Lock()
 	p.running--
 	for _, id := range pricingWatched {
@@ -136,11 +142,18 @@ func (p *livePricing) refresh(ctx context.Context) error {
 			changed = append(changed, id)
 		}
 	}
+	if p.vendorVersion != vendorVer {
+		p.vendorVersion = vendorVer
+		vendorUpdated = true
+	}
 	p.mu.Unlock()
 	for _, id := range changed {
 		if p.changed != nil {
 			p.changed(id)
 		}
+	}
+	if vendorUpdated && p.vendorChanged != nil {
+		p.vendorChanged()
 	}
 	p.notify()
 	return err
@@ -170,6 +183,10 @@ func (rt *liveApp) pricingVersion(provider store.Provider) string {
 		return snapshot.ProviderVersion("anthropic")
 	case store.ProviderGemini:
 		return geminiPriceVersion(snapshot)
+	case store.ProviderDroid:
+		return usage.VendorPricingVersion("droid-snapshot", snapshot)
+	case store.ProviderDevin:
+		return usage.VendorPricingVersion("devin-snapshot", snapshot)
 	}
 	return snapshot.ProviderVersion("openai")
 }

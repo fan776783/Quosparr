@@ -524,6 +524,10 @@ func (s *Service) SetPreferences(p store.Preferences) {
 			s.refreshClaudeLocal()
 		case store.ProviderGemini:
 			s.refreshGeminiLocal()
+		case store.ProviderDroid, store.ProviderDevin:
+			if costOn {
+				s.RefreshQuotaOnlyLocal(p.SelectedProvider)
+			}
 		}
 	}
 	if reportOn {

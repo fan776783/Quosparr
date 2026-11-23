@@ -1,12 +1,15 @@
 package app
 
 import (
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/licoy/quosparr/internal/l10n"
 	"github.com/licoy/quosparr/internal/runway"
 	"github.com/licoy/quosparr/internal/store"
+	"github.com/licoy/quosparr/internal/usage/decimal"
 )
 
 // Install guides of the quota-only providers.
@@ -51,7 +54,8 @@ func quotaOnlyHintKey(p store.Provider) l10n.Key {
 
 // panelQuotaOnly is the quota section of Droid or Devin: the opt-in switch
 // while monitoring is off, else the meters, a warning when the last read
-// failed, and the plan and balances behind the info button.
+// failed, and the plan and balances behind the info button. Each Droid
+// window also shows its own reset time.
 func panelQuotaOnly(c *ui.Context, l l10n.Localizer, prefs store.Preferences, snap runway.Snapshot, p store.Provider, acts PanelActions, first *bool, st *panelState) {
 	q := quotaOnlyState(snap, p)
 	on := prefs.MonitoringEnabled(p)
@@ -87,10 +91,90 @@ func panelQuotaOnly(c *ui.Context, l l10n.Localizer, prefs store.Preferences, sn
 		ui.Column(c).Gap(12).Children(func() {
 			now := time.Now()
 			for i, m := range q.Meters {
-				grokMeterRow(c.Key(string(p)+"-"+m.Title), l, m, i == 0, now, rs)
+				mc := c.Key(string(p) + "-" + m.Title)
+				if p == store.ProviderDroid && i > 0 {
+					slimMeterRow(mc, l, m, now, &rs)
+					continue
+				}
+				grokMeterRow(mc, l, m, i == 0, now, rs)
+			}
+			if prefs.ShowsCostSummary {
+				for _, line := range quotaOnlyCostLines(l, q.Meters, q.WindowCosts) {
+					quotaLineRow(c, line)
+				}
 			}
 		})
+		if prefs.ShowsCostSummary {
+			if disclosureRow(c, nil, l.Text(l10n.KeyShowDetails), true).Clicked() {
+				st.detail = store.ModuleAPICost
+			}
+		}
 	})
+}
+
+// quotaOnlyCostLines formats per-window local API-equivalent costs matching
+// Cursor's "used / estimated_total · Estimated" rows.
+func quotaOnlyCostLines(l l10n.Localizer, meters []runway.Meter, costs []runway.QuotaOnlyWindowCost) []runway.DetailLine {
+	if len(meters) == 0 || len(costs) == 0 {
+		return nil
+	}
+	var lines []runway.DetailLine
+	for _, m := range meters {
+		if m.Source != runway.SourceStandard || m.WindowMinutes <= 0 || !m.HasReset() {
+			continue
+		}
+		wc, ok := findWindowCost(costs, m.Source, m.WindowMinutes)
+		if !ok {
+			continue
+		}
+		if !wc.Priced {
+			val := quotaOnlyUSD(decimal.Zero)
+			if wc.Partial {
+				val = l.Pricing("unpriced")
+			}
+			lines = append(lines, runway.DetailLine{
+				Title: m.Title + " · " + l.Text(l10n.KeyUsed),
+				Value: val,
+			})
+			continue
+		}
+		if m.UsedPercent >= 1 && wc.USD.Sign() > 0 {
+			total := wc.USD.Mul(decimal.FromInt(100)).Div(decimal.FromInt(m.UsedPercent))
+			val := quotaOnlyUSD(wc.USD) + " / " + quotaOnlyUSD(total) + " · " + l.Text(l10n.KeyCursorEstimated)
+			if wc.Partial {
+				val += " · " + l.Pricing("partial")
+			}
+			lines = append(lines, runway.DetailLine{Title: m.Title, Value: val})
+			continue
+		}
+		val := quotaOnlyUSD(wc.USD)
+		if wc.Partial {
+			val += " · " + l.Pricing("partial")
+		}
+		lines = append(lines, runway.DetailLine{
+			Title: m.Title + " · " + l.Text(l10n.KeyUsed),
+			Value: val,
+		})
+	}
+	return lines
+}
+
+func findWindowCost(costs []runway.QuotaOnlyWindowCost, source runway.MeterSource, minutes int) (runway.QuotaOnlyWindowCost, bool) {
+	for _, wc := range costs {
+		if wc.Source == source && wc.WindowMinutes == minutes {
+			return wc, true
+		}
+	}
+	return runway.QuotaOnlyWindowCost{}, false
+}
+
+func quotaOnlyUSD(v decimal.Decimal) string {
+	f, _ := strconv.ParseFloat(v.String(), 64)
+	cents := int64(math.Round(f * 100))
+	if cents < 0 {
+		cents = 0
+	}
+	return cursorMoney(cents)
 }
 
 // quotaOnlyEmptyState explains why there is no reading and links the guide

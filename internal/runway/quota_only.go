@@ -6,6 +6,7 @@ import (
 
 	"github.com/licoy/quosparr/internal/l10n"
 	"github.com/licoy/quosparr/internal/store"
+	"github.com/licoy/quosparr/internal/usage/decimal"
 )
 
 // DailyMinutes is the length of Devin's daily window.
@@ -36,6 +37,15 @@ const (
 	QuotaOnlyFailed
 )
 
+// QuotaOnlyWindowCost is the local API-equivalent cost inside one quota window.
+type QuotaOnlyWindowCost struct {
+	Source        MeterSource // identifies the meter together with WindowMinutes
+	WindowMinutes int
+	USD           decimal.Decimal
+	Priced        bool // at least one event priced
+	Partial       bool // some tokens unpriced
+}
+
 // QuotaOnlyState is the view of Droid or Devin. It holds no credential
 // material; a failed refresh keeps the last reading.
 type QuotaOnlyState struct {
@@ -48,17 +58,23 @@ type QuotaOnlyState struct {
 	// Meters are the quota bars, the standard windows first.
 	Meters []Meter
 	// Details are the extra rows of the info popover.
-	Details    []DetailLine
-	LastError  string
-	Refreshing bool
+	Details     []DetailLine
+	WindowCosts []QuotaOnlyWindowCost
+	LastError   string
+	Refreshing  bool
 }
 
-// QuotaOnlyProvider follows the lock rules of ClaudeProvider. There is no
-// RefreshLocal: neither integration reads local sessions.
+// QuotaOnlyProvider follows the lock rules of ClaudeProvider.
 type QuotaOnlyProvider interface {
 	State(time.Time) QuotaOnlyState
 	Refresh(context.Context, bool) error
 	SetOnChange(func())
+}
+
+// QuotaOnlyLocalProvider is optionally implemented by a QuotaOnlyProvider
+// that scans local session usage for API-equivalent cost.
+type QuotaOnlyLocalProvider interface {
+	RefreshLocal(context.Context) error
 }
 
 func (s *Service) quotaOnly(p store.Provider) QuotaOnlyProvider {
@@ -82,6 +98,24 @@ func (s *Service) RefreshQuotaOnly(p store.Provider, force bool) <-chan struct{}
 		return closedChan()
 	}
 	return s.run(func() { _ = q.Refresh(s.root, force); s.publish() })
+}
+
+// RefreshQuotaOnlyLocal refreshes local session cost for Droid or Devin when
+// monitoring is on, falling back to RefreshQuotaOnly if the provider does not
+// implement QuotaOnlyLocalProvider.
+func (s *Service) RefreshQuotaOnlyLocal(p store.Provider) <-chan struct{} {
+	s.mu.Lock()
+	q := s.quotaOnly(p)
+	wanted := s.prefs.MonitoringEnabled(p)
+	s.mu.Unlock()
+	if q == nil || !wanted {
+		return closedChan()
+	}
+	local, ok := q.(QuotaOnlyLocalProvider)
+	if !ok {
+		return s.RefreshQuotaOnly(p, true)
+	}
+	return s.run(func() { _ = local.RefreshLocal(s.root); s.publish() })
 }
 
 // QuotaOnlyStatusText is the status text of Droid or Devin: the countdown or

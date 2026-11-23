@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/licoy/quosparr/internal/l10n"
+	"github.com/licoy/quosparr/internal/pricing"
 	"github.com/licoy/quosparr/internal/runway"
 	"github.com/licoy/quosparr/internal/store"
 )
@@ -28,6 +29,29 @@ func newForkRuntime(home, version string, prefs store.Preferences, langs []strin
 
 func (f forkRuntime) providers() runway.ForkProviders {
 	return runway.ForkProviders{Copilot: f.copilotB, Cursor: f.cursorB, Droid: f.droidB, Devin: f.devinB}
+}
+
+func (f forkRuntime) setPricingSnapshot(fn func() pricing.Snapshot) {
+	for _, b := range []*quotaOnlyBridge{f.droidB, f.devinB} {
+		if b != nil {
+			b.pricingSnapshot = fn
+		}
+	}
+}
+
+func (rt *liveApp) quotaOnlyPricesChanged() {
+	for _, item := range []struct {
+		p store.Provider
+		b *quotaOnlyBridge
+	}{{store.ProviderDroid, rt.droidB}, {store.ProviderDevin, rt.devinB}} {
+		if item.b == nil {
+			continue
+		}
+		item.b.invalidateCost()
+		if rt.svc != nil {
+			rt.svc.RefreshQuotaOnlyLocal(item.p)
+		}
+	}
 }
 
 func (rt *liveApp) closeForkProviders() {
@@ -84,8 +108,11 @@ func refreshForkSection(s *runway.Service, sec runway.Section) bool {
 			s.RefreshCursor(true)
 		}
 	case store.ProviderDroid, store.ProviderDevin:
-		if sec == runway.SectionQuota {
+		switch sec {
+		case runway.SectionQuota:
 			s.RefreshQuotaOnly(s.Preferences().SelectedProvider, true)
+		case runway.SectionAPICost:
+			s.RefreshQuotaOnlyLocal(s.Preferences().SelectedProvider)
 		}
 	default:
 		return false

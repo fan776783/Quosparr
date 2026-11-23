@@ -6,14 +6,19 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/licoy/quosparr/internal/devin"
 	"github.com/licoy/quosparr/internal/droid"
 	"github.com/licoy/quosparr/internal/l10n"
+	"github.com/licoy/quosparr/internal/pricing"
 	"github.com/licoy/quosparr/internal/runway"
 	"github.com/licoy/quosparr/internal/store"
+	"github.com/licoy/quosparr/internal/usage"
 )
 
 // quotaOnlyBackoff spaces automatic reads after the service rate limited one.
@@ -24,6 +29,9 @@ const quotaOnlyBackoff = 5 * time.Minute
 // the bridge serializes fetch and never holds its state lock across it.
 type quotaOnlySource interface {
 	fetch(ctx context.Context, now time.Time) (quotaOnlyRender, error)
+	// costDetail returns the last quota detail snapshot used to derive weekly
+	// cost cycles; never runs alongside fetch.
+	costDetail() any
 	// reset forgets the last reading; it never runs alongside fetch.
 	reset()
 }
@@ -31,23 +39,47 @@ type quotaOnlySource interface {
 // quotaOnlyRender builds the state of a reading in a language.
 type quotaOnlyRender func(lc l10n.Localizer) runway.QuotaOnlyState
 
+type quotaOnlyCostCache struct {
+	valid          bool
+	fingerprint    string
+	windowKey      string
+	pricingVersion string
+	windowCosts    []runway.QuotaOnlyWindowCost
+}
+
+type quotaOnlyWindowTarget struct {
+	source        runway.MeterSource
+	windowMinutes int
+	start         time.Time
+}
+
 // quotaOnlyBridge adapts Droid or Devin to runway.QuotaOnlyProvider. It reads
 // nothing while the provider's monitoring is off, and drops its reading when
 // monitoring is turned off.
 type quotaOnlyBridge struct {
-	provider store.Provider
-	src      quotaOnlySource
-	enabled  bool
-	gen      uint64
+	provider        store.Provider
+	src             quotaOnlySource
+	sessionsDir     string
+	dataDir         string
+	pricingSnapshot func() pricing.Snapshot
+	eventsScanner   func(ctx context.Context, w usage.Window, now time.Time) ([]usage.PricedEvent, string, error)
+	enabled         bool
+	showsCost       bool
+	gen             uint64
+	pricingGen      uint64
 	// resetSrc asks the next refresh to forget the source's reading; only a
 	// refresh, which holds refreshMu, touches the source.
 	resetSrc  bool
 	now       func() time.Time
 	refreshMu sync.Mutex
+	costMu    sync.Mutex
 	mu        sync.Mutex
 	lc        l10n.Localizer
 	state     runway.QuotaOnlyState
 	render    quotaOnlyRender
+	detail    any
+	costs     []runway.QuotaOnlyWindowCost
+	costCache quotaOnlyCostCache
 	refreshes int
 	retryAt   time.Time
 	onChange  func()
@@ -60,12 +92,17 @@ func newQuotaOnlyBridge(provider store.Provider, src quotaOnlySource, prefs stor
 }
 
 func newDroidBridge(home string, prefs store.Preferences, langs []string) *quotaOnlyBridge {
-	return newQuotaOnlyBridge(store.ProviderDroid, &droidSource{store: droid.NewStore(home)}, prefs, langs)
+	b := newQuotaOnlyBridge(store.ProviderDroid, &droidSource{store: droid.NewStore(home)}, prefs, langs)
+	b.sessionsDir = filepath.Join(home, ".factory", "sessions")
+	return b
 }
 
 func newDevinBridge(home, version string, prefs store.Preferences, langs []string) *quotaOnlyBridge {
-	src := &devinSource{dir: devin.DataDir(home, os.Getenv), client: devin.Client{Version: version}}
-	return newQuotaOnlyBridge(store.ProviderDevin, src, prefs, langs)
+	dir := devin.DataDir(home, os.Getenv)
+	src := &devinSource{dir: dir, client: devin.Client{Version: version}}
+	b := newQuotaOnlyBridge(store.ProviderDevin, src, prefs, langs)
+	b.dataDir = dir
+	return b
 }
 
 func (b *quotaOnlyBridge) State(time.Time) runway.QuotaOnlyState {
@@ -79,8 +116,9 @@ func (b *quotaOnlyBridge) State(time.Time) runway.QuotaOnlyState {
 	return st
 }
 
-// Refresh rereads the login and the quota. After a rate limited read only a
-// manual refresh reads again before the backoff ends.
+// Refresh rereads the login and the quota, publishes the quota immediately,
+// and then scans local session cost when enabled. After a rate limited read
+// only a manual refresh reads the quota again before the backoff ends.
 func (b *quotaOnlyBridge) Refresh(ctx context.Context, force bool) error {
 	b.mu.Lock()
 	wait := !b.enabled || !force && b.now().Before(b.retryAt)
@@ -91,8 +129,8 @@ func (b *quotaOnlyBridge) Refresh(ctx context.Context, force bool) error {
 	b.changeRefreshing(1)
 	defer b.changeRefreshing(-1)
 	b.refreshMu.Lock()
-	defer b.refreshMu.Unlock()
 	if err := ctx.Err(); err != nil {
+		b.refreshMu.Unlock()
 		return err
 	}
 	b.mu.Lock()
@@ -103,9 +141,13 @@ func (b *quotaOnlyBridge) Refresh(ctx context.Context, force bool) error {
 		b.src.reset()
 	}
 	if !enabled {
+		b.refreshMu.Unlock()
 		return nil
 	}
 	render, err := b.src.fetch(ctx, b.now())
+	detail := b.src.costDetail()
+	b.refreshMu.Unlock()
+
 	b.mu.Lock()
 	if gen != b.gen {
 		// Monitoring was turned off meanwhile: drop the reading.
@@ -118,13 +160,304 @@ func (b *quotaOnlyBridge) Refresh(ctx context.Context, force bool) error {
 		b.retryAt = time.Time{}
 	}
 	b.render = render
-	b.state = render(b.lc)
+	b.detail = detail
+	st := render(b.lc)
+	if b.showsCost && len(b.costs) > 0 {
+		st.WindowCosts = append([]runway.QuotaOnlyWindowCost(nil), b.costs...)
+	}
+	b.state = st
 	fn := b.onChange
 	b.mu.Unlock()
 	if fn != nil {
 		fn()
 	}
+	_ = b.scanCost(ctx, false)
 	return ctx.Err()
+}
+
+// RefreshLocal rescans local session cost without touching the quota API.
+func (b *quotaOnlyBridge) RefreshLocal(ctx context.Context) error {
+	b.mu.Lock()
+	enabled := b.enabled && b.showsCost
+	b.mu.Unlock()
+	if !enabled {
+		return nil
+	}
+	b.changeRefreshing(1)
+	defer b.changeRefreshing(-1)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return b.scanCost(ctx, true)
+}
+
+func (b *quotaOnlyBridge) scanCost(ctx context.Context, force bool) error {
+	b.costMu.Lock()
+	defer b.costMu.Unlock()
+
+	b.mu.Lock()
+	if !b.enabled || !b.showsCost {
+		b.mu.Unlock()
+		return nil
+	}
+	gen := b.gen
+	priceGen := b.pricingGen
+	meters := append([]runway.Meter(nil), b.state.Meters...)
+	snapFn := b.pricingSnapshot
+	cache := b.costCache
+	b.mu.Unlock()
+
+	now := b.now()
+	targets, earliest, ok := quotaOnlyWindowTargets(meters, now)
+	if !ok {
+		b.mu.Lock()
+		if gen == b.gen && priceGen == b.pricingGen && b.enabled && b.showsCost && ctx.Err() == nil && len(b.costs) > 0 {
+			b.costs = nil
+			b.state.WindowCosts = nil
+			fn := b.onChange
+			b.mu.Unlock()
+			if fn != nil {
+				fn()
+			}
+		} else {
+			b.mu.Unlock()
+		}
+		return nil
+	}
+
+	var snap pricing.Snapshot
+	if snapFn != nil {
+		snap = snapFn()
+	}
+	priceVer := usage.VendorPricingVersion("", snap)
+	fp := b.costFingerprint()
+	winKey := quotaOnlyWindowTargetKey(targets)
+	if !force && fp != "" && cache.valid && cache.fingerprint == fp && cache.windowKey == winKey && cache.pricingVersion == priceVer {
+		reused := append([]runway.QuotaOnlyWindowCost(nil), cache.windowCosts...)
+		b.mu.Lock()
+		if gen == b.gen && priceGen == b.pricingGen && b.enabled && b.showsCost && ctx.Err() == nil {
+			b.costs = reused
+			b.state.WindowCosts = append([]runway.QuotaOnlyWindowCost(nil), reused...)
+			fn := b.onChange
+			b.mu.Unlock()
+			if fn != nil {
+				fn()
+			}
+		} else {
+			b.mu.Unlock()
+		}
+		return nil
+	}
+
+	events, _, err := b.scanCostEvents(ctx, usage.Window{Start: earliest, End: now}, now, snapFn)
+	if err != nil {
+		return err
+	}
+	costs := summarizeWindowCosts(targets, events, now)
+	b.mu.Lock()
+	if gen != b.gen || priceGen != b.pricingGen || !b.enabled || !b.showsCost || ctx.Err() != nil {
+		b.mu.Unlock()
+		return ctx.Err()
+	}
+	if snapFn != nil && usage.VendorPricingVersion("", snapFn()) != priceVer {
+		b.mu.Unlock()
+		return context.Canceled
+	}
+	b.costs = costs
+	b.state.WindowCosts = append([]runway.QuotaOnlyWindowCost(nil), costs...)
+	if fp != "" {
+		b.costCache = quotaOnlyCostCache{
+			valid:          true,
+			fingerprint:    fp,
+			windowKey:      winKey,
+			pricingVersion: priceVer,
+			windowCosts:    append([]runway.QuotaOnlyWindowCost(nil), costs...),
+		}
+	}
+	fn := b.onChange
+	b.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
+	return nil
+}
+
+func quotaOnlyWindowTargets(meters []runway.Meter, now time.Time) (targets []quotaOnlyWindowTarget, earliest time.Time, ok bool) {
+	for _, m := range meters {
+		if m.Source != runway.SourceStandard || m.WindowMinutes <= 0 || !m.HasReset() {
+			continue
+		}
+		start := m.ResetsAt.Add(-time.Duration(m.WindowMinutes) * time.Minute)
+		targets = append(targets, quotaOnlyWindowTarget{
+			source:        m.Source,
+			windowMinutes: m.WindowMinutes,
+			start:         start,
+		})
+		if start.Before(now) && (earliest.IsZero() || start.Before(earliest)) {
+			earliest = start
+		}
+	}
+	if len(targets) == 0 || earliest.IsZero() || !now.After(earliest) {
+		return nil, time.Time{}, false
+	}
+	return targets, earliest, true
+}
+
+func quotaOnlyWindowTargetKey(targets []quotaOnlyWindowTarget) string {
+	var b strings.Builder
+	for i, t := range targets {
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		b.WriteString(strconv.Itoa(int(t.source)))
+		b.WriteByte(':')
+		b.WriteString(strconv.Itoa(t.windowMinutes))
+		b.WriteByte(':')
+		b.WriteString(strconv.FormatInt(t.start.UnixNano(), 10))
+	}
+	return b.String()
+}
+
+func summarizeWindowCosts(targets []quotaOnlyWindowTarget, events []usage.PricedEvent, now time.Time) []runway.QuotaOnlyWindowCost {
+	out := make([]runway.QuotaOnlyWindowCost, len(targets))
+	for i, t := range targets {
+		wc := runway.QuotaOnlyWindowCost{
+			Source:        t.source,
+			WindowMinutes: t.windowMinutes,
+		}
+		if now.After(t.start) {
+			for _, ev := range events {
+				if ev.Totals.TotalTokens <= 0 || ev.Time.Before(t.start) || !ev.Time.Before(now) {
+					continue
+				}
+				if ev.USD != nil {
+					wc.USD = wc.USD.Add(*ev.USD)
+					wc.Priced = true
+				} else {
+					wc.Partial = true
+				}
+			}
+		}
+		out[i] = wc
+	}
+	return out
+}
+
+func (b *quotaOnlyBridge) costFingerprint() string {
+	if b.provider == store.ProviderDevin && b.dataDir != "" {
+		st, ok := devin.SessionDBState(b.dataDir)
+		if !ok {
+			return "missing"
+		}
+		return fmt.Sprintf("%d:%d:%d:%d", st.DBSize, st.DBMtime.UnixNano(), st.WALSize, st.WALMtime.UnixNano())
+	}
+	return ""
+}
+
+func (b *quotaOnlyBridge) scanCostEvents(ctx context.Context, w usage.Window, now time.Time, snapFn func() pricing.Snapshot) ([]usage.PricedEvent, string, error) {
+	if b.eventsScanner != nil {
+		return b.eventsScanner(ctx, w, now)
+	}
+	if snapFn == nil {
+		snapFn = b.pricingSnapshot
+	}
+	if b.provider == store.ProviderDevin {
+		return (devin.SessionScanner{
+			DataDir:         b.dataDir,
+			Location:        time.Local,
+			PricingSnapshot: snapFn,
+		}).ScanEvents(ctx, w, now)
+	}
+	return (droid.SessionScanner{
+		Dir:             b.sessionsDir,
+		Location:        time.Local,
+		PricingSnapshot: snapFn,
+	}).ScanEvents(ctx, w, now)
+}
+
+func (b *quotaOnlyBridge) scanCostWindow(ctx context.Context, w usage.Window, now time.Time, snapFn func() pricing.Snapshot) (usage.Summary, error) {
+	if snapFn == nil {
+		snapFn = b.pricingSnapshot
+	}
+	if b.eventsScanner != nil {
+		events, ver, err := b.eventsScanner(ctx, w, now)
+		if err != nil {
+			return usage.Summary{}, err
+		}
+		client := droid.SessionClientName
+		if b.provider == store.ProviderDevin {
+			client = devin.SessionClientName
+		}
+		return usage.SummarizePricedEvents(events, w, time.Local, client, ver, now), nil
+	}
+	if b.provider == store.ProviderDevin {
+		return (devin.SessionScanner{
+			DataDir:         b.dataDir,
+			Location:        time.Local,
+			PricingSnapshot: snapFn,
+		}).ScanCost(ctx, w, now)
+	}
+	return (droid.SessionScanner{
+		Dir:             b.sessionsDir,
+		Location:        time.Local,
+		PricingSnapshot: snapFn,
+	}).ScanCost(ctx, w, now)
+}
+
+func (b *quotaOnlyBridge) costDetail() any {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.detail
+}
+
+func (b *quotaOnlyBridge) invalidateCost() {
+	b.mu.Lock()
+	b.pricingGen++
+	b.costs = nil
+	b.costCache = quotaOnlyCostCache{}
+	b.state.WindowCosts = nil
+	fn := b.onChange
+	b.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
+}
+
+// quotaOnlyCostWindow resolves the cost window for Droid or Devin: Today and
+// ThisMonth follow the local calendar; Current and Previous use the active
+// weekly quota reset (Standard.Weekly for Droid, Weekly for Devin) when it is
+// still in the future, falling back to the trailing 7-day / prior 7-day window.
+func quotaOnlyCostWindow(provider store.Provider, r store.CostRange, detail any, now time.Time) usage.Window {
+	switch r {
+	case store.CostRangeToday:
+		return usage.Today(now, time.Local).Window
+	case store.CostRangeThisMonth:
+		return usage.ThisMonth(now, time.Local).Window
+	}
+	var resetAt time.Time
+	switch provider {
+	case store.ProviderDroid:
+		if limits, ok := detail.(*droid.Limits); ok && limits != nil && limits.Standard.Weekly != nil {
+			resetAt = limits.Standard.Weekly.EndsAt
+		}
+	case store.ProviderDevin:
+		if status, ok := detail.(*devin.Status); ok && status != nil && status.Weekly != nil {
+			resetAt = status.Weekly.ResetsAt
+		}
+	}
+	if !resetAt.IsZero() && resetAt.After(now) {
+		end := resetAt
+		start := end.Add(-7 * 24 * time.Hour)
+		if r == store.CostRangePrevious {
+			return usage.Window{Start: start.Add(-7 * 24 * time.Hour), End: start}
+		}
+		return usage.Window{Start: start, End: minTime(end, now)}
+	}
+	start := now.Add(-7 * 24 * time.Hour)
+	if r == store.CostRangePrevious {
+		return usage.Window{Start: start.Add(-7 * 24 * time.Hour), End: start}
+	}
+	return usage.Window{Start: start, End: now}
 }
 
 func (b *quotaOnlyBridge) SetOnChange(fn func()) {
@@ -149,17 +482,30 @@ func (b *quotaOnlyBridge) setPreferences(p store.Preferences, langs []string) {
 	b.mu.Lock()
 	lc := l10n.ForPreference(string(p.Language), langs)
 	enabled := p.MonitoringEnabled(b.provider)
-	changed := lc.Language() != b.lc.Language() || enabled != b.enabled
+	costToggled := b.showsCost != p.ShowsCostSummary
+	changed := lc.Language() != b.lc.Language() || enabled != b.enabled || costToggled
 	b.lc = lc
+	b.showsCost = p.ShowsCostSummary
 	if enabled != b.enabled {
 		b.enabled = enabled
 		b.gen++
 		b.render, b.retryAt = nil, time.Time{}
+		b.detail, b.costs, b.costCache = nil, nil, quotaOnlyCostCache{}
 		b.state = runway.QuotaOnlyState{Availability: runway.QuotaOnlyLoading}
 		b.resetSrc = true
+	} else if costToggled && !p.ShowsCostSummary {
+		// Only the cost is stale: a quota read in flight stays valid.
+		b.pricingGen++
+		b.costs = nil
+		b.costCache = quotaOnlyCostCache{}
+		b.state.WindowCosts = nil
 	}
 	if changed && b.render != nil {
-		b.state = b.render(lc)
+		st := b.render(lc)
+		if b.showsCost && len(b.costs) > 0 {
+			st.WindowCosts = append([]runway.QuotaOnlyWindowCost(nil), b.costs...)
+		}
+		b.state = st
 	}
 	fn := b.onChange
 	b.mu.Unlock()
@@ -181,6 +527,14 @@ func (s *droidSource) fetch(ctx context.Context, now time.Time) (quotaOnlyRender
 	err := s.read(ctx, now)
 	view := *s
 	return view.state, err
+}
+
+func (s *droidSource) costDetail() any {
+	if s.limits == nil {
+		return nil
+	}
+	cp := *s.limits
+	return &cp
 }
 
 func (s *droidSource) reset() { s.login, s.limits, s.err = nil, nil, nil }
@@ -296,6 +650,14 @@ func (s *devinSource) fetch(ctx context.Context, now time.Time) (quotaOnlyRender
 	err := s.read(ctx, now)
 	view := *s
 	return view.state, err
+}
+
+func (s *devinSource) costDetail() any {
+	if s.status == nil {
+		return nil
+	}
+	cp := *s.status
+	return &cp
 }
 
 func (s *devinSource) reset() { s.key, s.status, s.err = "", nil, nil }

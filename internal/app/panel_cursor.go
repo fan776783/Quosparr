@@ -48,10 +48,7 @@ func panelCursorQuota(c *ui.Context, l l10n.Localizer, p store.Preferences, s ru
 				grokMeterRow(c.Key("cursor-pool-"+m.Title), l, m, true, time.Now(), st.resetSwitch(p.QuotaResetTimeFormat))
 			}
 			for _, line := range s.Lines {
-				ui.Row(c).Gap(8).Children(func() {
-					ui.Text(c, line.Title).FontSize(fsCaption).Grow(1).Basis(0)
-					ui.Text(c, line.Value).FontSize(fsCaption).FontFeatures("tnum")
-				})
+				quotaLineRow(c, line)
 			}
 		})
 		if len(s.Meters) == 0 && len(s.Lines) == 0 && s.LastError == "" {
@@ -112,6 +109,13 @@ func renderCursorAccount(c *ui.Context, u *settingsUI, s runway.CursorState, ref
 		if linkButton(c, l.Text(l10n.KeyCursorOpenUsage)).Clicked() {
 			c.OpenURL(cursorUsageURL)
 		}
+	})
+}
+
+func quotaLineRow(c *ui.Context, line runway.DetailLine) {
+	ui.Row(c).Gap(8).Children(func() {
+		ui.Text(c, line.Title).FontSize(fsCaption).Grow(1).Basis(0)
+		ui.Text(c, line.Value).FontSize(fsCaption).FontFeatures("tnum")
 	})
 }
 

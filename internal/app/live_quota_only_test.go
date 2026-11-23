@@ -6,20 +6,27 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/plugins/sqlite"
 	"github.com/licoy/quosparr/internal/devin"
 	"github.com/licoy/quosparr/internal/droid"
 	"github.com/licoy/quosparr/internal/l10n"
+	"github.com/licoy/quosparr/internal/pricing"
 	"github.com/licoy/quosparr/internal/runway"
+	"github.com/licoy/quosparr/internal/sqliteruntime"
 	"github.com/licoy/quosparr/internal/store"
+	"github.com/licoy/quosparr/internal/usage"
+	"github.com/licoy/quosparr/internal/usage/decimal"
 )
 
 var quotaOnlyNow = time.Date(2026, 11, 21, 8, 0, 0, 0, time.UTC)
@@ -87,6 +94,10 @@ func TestDroidBridgeReadsQuota(t *testing.T) {
 	if len(st.Meters) != 3 || st.Meters[0].Title != "Standard · 5-hour" || st.Meters[0].UsedPercent != 23 ||
 		st.Meters[0].Source != runway.SourceStandard || st.Meters[2].Source != runway.SourceModelSpecific || st.Meters[2].Title != "Core · Weekly" {
 		t.Fatalf("meters %+v", st.Meters)
+	}
+	if !st.Meters[0].ResetsAt.Equal(time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)) ||
+		!st.Meters[2].ResetsAt.Equal(time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("resets %+v", st.Meters)
 	}
 	if len(st.Details) != 2 || st.Details[1].Value != "$12.50" {
 		t.Fatalf("details %+v", st.Details)
@@ -202,5 +213,385 @@ func TestQuotaOnlyBridgeMonitoringSwitch(t *testing.T) {
 	b.setPreferences(quotaOnlyPrefs(), nil)
 	if st := b.State(quotaOnlyNow); st.Availability != runway.QuotaOnlyLoading || len(st.Meters) != 0 {
 		t.Fatalf("re-enabled state kept the old reading: %+v", st)
+	}
+}
+
+func testQuotaOnlyPricing(t *testing.T, kimiInput string) pricing.Snapshot {
+	t.Helper()
+	d := func(s string) *decimal.Decimal { v := decimal.MustParse(s); return &v }
+	snap, err := pricing.NewSnapshot([]pricing.Model{
+		{ProviderID: "anthropic", ID: "claude-opus-5-5", Rate: pricing.Rate{Input: d("5"), Output: d("25"), CacheRead: d("0.5"), CacheWrite: d("6.25")}},
+		{ProviderID: "moonshotai", ID: "kimi-k3", Rate: pricing.Rate{Input: d(kimiInput), Output: d("4")}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snap
+}
+
+func TestQuotaOnlyCostWindow(t *testing.T) {
+	now := time.Date(2026, 11, 21, 8, 0, 0, 0, time.Local)
+	week := 7 * 24 * time.Hour
+	futureReset := now.Add(48 * time.Hour)
+	pastReset := now.Add(-time.Hour)
+
+	droidDetail := &droid.Limits{Standard: droid.Pool{Weekly: &droid.Window{UsedPercent: 51, EndsAt: futureReset}}}
+	devinDetail := &devin.Status{Weekly: &devin.Window{RemainingPercent: 80, ResetsAt: futureReset}}
+
+	for _, tc := range []struct {
+		provider store.Provider
+		detail   any
+	}{
+		{store.ProviderDroid, droidDetail},
+		{store.ProviderDevin, devinDetail},
+	} {
+		cur := quotaOnlyCostWindow(tc.provider, store.CostRangeCurrent, tc.detail, now)
+		if !cur.Start.Equal(futureReset.Add(-week)) || !cur.End.Equal(now) {
+			t.Fatalf("%s current = %+v", tc.provider, cur)
+		}
+		prev := quotaOnlyCostWindow(tc.provider, store.CostRangePrevious, tc.detail, now)
+		if !prev.End.Equal(cur.Start) || !prev.Start.Equal(cur.Start.Add(-week)) {
+			t.Fatalf("%s previous = %+v", tc.provider, prev)
+		}
+		today := quotaOnlyCostWindow(tc.provider, store.CostRangeToday, tc.detail, now)
+		if today != usage.Today(now, time.Local).Window {
+			t.Fatalf("%s today = %+v", tc.provider, today)
+		}
+		month := quotaOnlyCostWindow(tc.provider, store.CostRangeThisMonth, tc.detail, now)
+		if month != usage.ThisMonth(now, time.Local).Window {
+			t.Fatalf("%s month = %+v", tc.provider, month)
+		}
+	}
+
+	expiredDroid := &droid.Limits{Standard: droid.Pool{Weekly: &droid.Window{EndsAt: pastReset}}}
+	expiredDevin := &devin.Status{Weekly: &devin.Window{ResetsAt: pastReset}}
+	for _, detail := range []any{nil, expiredDroid, expiredDevin} {
+		cur := quotaOnlyCostWindow(store.ProviderDroid, store.CostRangeCurrent, detail, now)
+		if !cur.Start.Equal(now.Add(-week)) || !cur.End.Equal(now) {
+			t.Fatalf("fallback current %v = %+v", detail, cur)
+		}
+		prev := quotaOnlyCostWindow(store.ProviderDevin, store.CostRangePrevious, detail, now)
+		if !prev.Start.Equal(now.Add(-2*week)) || !prev.End.Equal(now.Add(-week)) {
+			t.Fatalf("fallback previous %v = %+v", detail, prev)
+		}
+	}
+}
+
+func TestQuotaOnlyCostLines(t *testing.T) {
+	zh := l10n.New(l10n.SimplifiedChinese)
+	reset := quotaOnlyNow.Add(2 * time.Hour)
+	standard5h := runway.Meter{Title: "Standard · 5小时", Source: runway.SourceStandard, WindowMinutes: runway.FiveHourMinutes, UsedPercent: 25, ResetsAt: reset}
+	standard7dZero := runway.Meter{Title: "Standard · 每周", Source: runway.SourceStandard, WindowMinutes: runway.WeeklyMinutes, UsedPercent: 0, ResetsAt: reset}
+	standard30d := runway.Meter{Title: "Standard · 每月", Source: runway.SourceStandard, WindowMinutes: runway.MonthlyMinutes, UsedPercent: 50, ResetsAt: reset}
+	core7d := runway.Meter{Title: "Core · 每周", Source: runway.SourceModelSpecific, WindowMinutes: runway.WeeklyMinutes, UsedPercent: 80, ResetsAt: reset}
+	unstarted := runway.Meter{Title: "Standard · 未开始", Source: runway.SourceStandard, WindowMinutes: runway.WeeklyMinutes, UsedPercent: 10}
+
+	cases := []struct {
+		name   string
+		meters []runway.Meter
+		costs  []runway.QuotaOnlyWindowCost
+		want   []runway.DetailLine
+	}{
+		{
+			name:   "estimated total",
+			meters: []runway.Meter{standard5h},
+			costs:  []runway.QuotaOnlyWindowCost{{Source: runway.SourceStandard, WindowMinutes: runway.FiveHourMinutes, USD: decimal.MustParse("12.5"), Priced: true}},
+			want:   []runway.DetailLine{{Title: "Standard · 5小时", Value: "$12.50 / $50.00 · 估算"}},
+		},
+		{
+			name:   "estimated total with partial",
+			meters: []runway.Meter{standard5h},
+			costs:  []runway.QuotaOnlyWindowCost{{Source: runway.SourceStandard, WindowMinutes: runway.FiveHourMinutes, USD: decimal.MustParse("12.5"), Priced: true, Partial: true}},
+			want:   []runway.DetailLine{{Title: "Standard · 5小时", Value: "$12.50 / $50.00 · 估算 · " + zh.Pricing("partial")}},
+		},
+		{
+			name:   "used percent zero",
+			meters: []runway.Meter{standard7dZero},
+			costs:  []runway.QuotaOnlyWindowCost{{Source: runway.SourceStandard, WindowMinutes: runway.WeeklyMinutes, USD: decimal.MustParse("3.45"), Priced: true}},
+			want:   []runway.DetailLine{{Title: "Standard · 每周 · " + zh.Text(l10n.KeyUsed), Value: "$3.45"}},
+		},
+		{
+			name:   "all unpriced never shows 0/0",
+			meters: []runway.Meter{standard30d},
+			costs:  []runway.QuotaOnlyWindowCost{{Source: runway.SourceStandard, WindowMinutes: runway.MonthlyMinutes, Priced: false, Partial: true}},
+			want:   []runway.DetailLine{{Title: "Standard · 每月 · " + zh.Text(l10n.KeyUsed), Value: zh.Pricing("unpriced")}},
+		},
+		{
+			name:   "zero usage never shows 0/0",
+			meters: []runway.Meter{standard30d},
+			costs:  []runway.QuotaOnlyWindowCost{{Source: runway.SourceStandard, WindowMinutes: runway.MonthlyMinutes, Priced: false, Partial: false}},
+			want:   []runway.DetailLine{{Title: "Standard · 每月 · " + zh.Text(l10n.KeyUsed), Value: "$0.00"}},
+		},
+		{
+			name:   "skips droid core and unstarted windows",
+			meters: []runway.Meter{standard5h, core7d, unstarted},
+			costs: []runway.QuotaOnlyWindowCost{
+				{Source: runway.SourceStandard, WindowMinutes: runway.FiveHourMinutes, USD: decimal.MustParse("12.5"), Priced: true},
+				{Source: runway.SourceModelSpecific, WindowMinutes: runway.WeeklyMinutes, USD: decimal.MustParse("99"), Priced: true},
+			},
+			want: []runway.DetailLine{{Title: "Standard · 5小时", Value: "$12.50 / $50.00 · 估算"}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := quotaOnlyCostLines(zh, tc.meters, tc.costs)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len = %d, want %d (%+v)", len(got), len(tc.want), got)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("[%d] = %+v, want %+v", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestDroidBridgeWindowCostsAndErrorPreservation(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".factory")
+	writeDroidLogin(t, dir, "ada@example.com", quotaOnlyNow.Add(time.Hour))
+	sessionsDir := filepath.Join(dir, "sessions")
+	projDir := filepath.Join(sessionsDir, "my-app")
+	if err := os.MkdirAll(projDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeSess := func(name string, age time.Duration) {
+		p := filepath.Join(projDir, name+".settings.json")
+		if err := os.WriteFile(p, []byte(`{"model":"kimi-k3","tokenUsage":{"inputTokens":1000000,"outputTokens":100000}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		mt := quotaOnlyNow.Add(-age)
+		if err := os.Chtimes(p, mt, mt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Standard.FiveHour ends at 2026-11-21T10:00Z -> start 05:00Z (3h before quotaOnlyNow 08:00Z)
+	// Standard.Weekly ends at 2026-11-26T00:00Z -> start 2026-11-19T00:00Z (~2d8h before quotaOnlyNow)
+	// Standard.Monthly ends at 2026-12-10T00:00Z -> start 2026-11-10T00:00Z (~11d8h before quotaOnlyNow)
+	writeSess("in-5h", 2*time.Hour)     // counted in 5h, 7d, 30d ($1.40 each)
+	writeSess("in-7d", 24*time.Hour)    // counted in 7d, 30d ($1.40)
+	writeSess("in-30d", 5*24*time.Hour) // counted in 30d ($1.40)
+
+	limitsWithMonthly := `{"hasActiveSubscription":true,"limits":{
+		"standard":{
+			"fiveHour":{"usedPercent":20,"windowEnd":"2026-11-21T10:00:00Z"},
+			"weekly":{"usedPercent":40,"windowEnd":"2026-11-26T00:00:00Z"},
+			"monthly":{"usedPercent":50,"windowEnd":"2026-12-10T00:00:00Z"}
+		},
+		"core":{"weekly":{"usedPercent":75,"windowEnd":"2026-11-25T00:00:00Z"}}
+	}}`
+	b := droidTestBridge(t, dir, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(limitsWithMonthly))
+	})
+	b.sessionsDir = sessionsDir
+	snap := testQuotaOnlyPricing(t, "1")
+	b.pricingSnapshot = func() pricing.Snapshot { return snap }
+
+	if err := b.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	st := b.State(quotaOnlyNow)
+	if len(st.WindowCosts) != 3 {
+		t.Fatalf("windowCosts = %+v, want 3 standard windows (no core)", st.WindowCosts)
+	}
+	wantByWin := map[int]string{
+		runway.FiveHourMinutes: "1.4",
+		runway.WeeklyMinutes:   "2.8",
+		runway.MonthlyMinutes:  "4.2",
+	}
+	for _, wc := range st.WindowCosts {
+		if wc.Source != runway.SourceStandard || !wc.Priced || wc.USD.String() != wantByWin[wc.WindowMinutes] {
+			t.Fatalf("unexpected windowCost %+v, want %s", wc, wantByWin[wc.WindowMinutes])
+		}
+	}
+
+	// Scan error preserves the previous WindowCosts.
+	b.eventsScanner = func(context.Context, usage.Window, time.Time) ([]usage.PricedEvent, string, error) {
+		return nil, "", errors.New("boom")
+	}
+	if err := b.RefreshLocal(context.Background()); err == nil {
+		t.Fatal("expected error from failing eventsScanner")
+	}
+	if got := b.State(quotaOnlyNow).WindowCosts; len(got) != 3 || got[0].USD.String() != "1.4" {
+		t.Fatalf("previous windowCosts lost on error: %+v", got)
+	}
+
+	// Disabling ShowsCostSummary clears WindowCosts without canceling quota state.
+	p := quotaOnlyPrefs()
+	p.ShowsCostSummary = false
+	b.setPreferences(p, []string{"en"})
+	stAfter := b.State(quotaOnlyNow)
+	if len(stAfter.WindowCosts) != 0 || stAfter.Availability != runway.QuotaOnlyReady {
+		t.Fatalf("state after ShowsCostSummary=false: %+v", stAfter)
+	}
+	if err := b.RefreshLocal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDevinBridgeCostCacheAndDetailQuery(t *testing.T) {
+	if err := sqliteruntime.Load(); err != nil {
+		t.Fatal(err)
+	}
+	// Daily reset 12h ahead, weekly reset 5d ahead relative to quotaOnlyNow.
+	dailyReset := quotaOnlyNow.Add(12 * time.Hour).Unix()
+	weeklyReset := quotaOnlyNow.Add(5 * 24 * time.Hour).Unix()
+	statusJSON := `{"userStatus":{"name":"Ada","email":"ada@example.com","planStatus":{"planInfo":{"planName":"Pro","billingStrategy":"BILLING_STRATEGY_QUOTA"},
+"dailyQuotaRemainingPercent":60,"weeklyQuotaRemainingPercent":81,"dailyQuotaResetAtUnix":"` +
+		strconv.FormatInt(dailyReset, 10) + `","weeklyQuotaResetAtUnix":"` + strconv.FormatInt(weeklyReset, 10) + `"}}}`
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(statusJSON))
+	}))
+	defer srv.Close()
+
+	dataDir := t.TempDir()
+	creds := "windsurf_api_key = \"devin-synthetic\"\napi_server_url = \"" + srv.URL + "\"\n"
+	if err := os.WriteFile(devin.CredentialsPath(dataDir), []byte(creds), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dbPath := devin.SessionDBPath(dataDir)
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sqlite.Open(context.Background(), dbPath, sqlite.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE sessions (id TEXT PRIMARY KEY, working_directory TEXT)`,
+		`CREATE TABLE message_nodes (session_id TEXT, chat_message TEXT, created_at INTEGER)`,
+		`INSERT INTO sessions(id, working_directory) VALUES ('s1', '/tmp/devin-proj')`,
+	} {
+		if _, err := db.Execute(context.Background(), stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	msg1 := `{"role":"assistant","metadata":{"generation_model":"claude-opus-5-5-medium","created_at":"` + quotaOnlyNow.Add(-time.Hour).Format(time.RFC3339) + `","metrics":{"input_tokens":100000,"output_tokens":10000}}}`
+	msg2 := `{"role":"assistant","metadata":{"generation_model":"claude-opus-5-5-medium","created_at":"` + quotaOnlyNow.Add(-36*time.Hour).Format(time.RFC3339) + `","metrics":{"input_tokens":100000,"output_tokens":10000}}}`
+	for _, m := range []struct {
+		body string
+		ts   int64
+	}{{msg1, quotaOnlyNow.Add(-time.Hour).Unix()}, {msg2, quotaOnlyNow.Add(-36 * time.Hour).Unix()}} {
+		if _, err := db.Execute(context.Background(), `INSERT INTO message_nodes(session_id, chat_message, created_at) VALUES ('s1', ?, ?)`, m.body, m.ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	snap := testQuotaOnlyPricing(t, "1")
+	src := &devinSource{dir: dataDir, client: devin.Client{HTTP: srv.Client(), Version: "test"}}
+	b := newQuotaOnlyBridge(store.ProviderDevin, src, quotaOnlyPrefs(), []string{"en"})
+	b.dataDir = dataDir
+	b.now = func() time.Time { return quotaOnlyNow }
+	b.pricingSnapshot = func() pricing.Snapshot { return snap }
+
+	var scans atomic.Int32
+	b.eventsScanner = func(ctx context.Context, w usage.Window, now time.Time) ([]usage.PricedEvent, string, error) {
+		scans.Add(1)
+		return (devin.SessionScanner{DataDir: dataDir, Location: time.Local, PricingSnapshot: b.pricingSnapshot}).ScanEvents(ctx, w, now)
+	}
+
+	if err := b.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if scans.Load() != 1 {
+		t.Fatalf("scans = %d, want 1", scans.Load())
+	}
+	st := b.State(quotaOnlyNow)
+	if len(st.WindowCosts) != 2 {
+		t.Fatalf("windowCosts = %+v, want 2", st.WindowCosts)
+	}
+	if st.WindowCosts[0].WindowMinutes != runway.DailyMinutes || st.WindowCosts[0].USD.String() != "0.75" {
+		t.Fatalf("daily windowCost = %+v", st.WindowCosts[0])
+	}
+	if st.WindowCosts[1].WindowMinutes != runway.WeeklyMinutes || st.WindowCosts[1].USD.String() != "1.5" {
+		t.Fatalf("weekly windowCost = %+v", st.WindowCosts[1])
+	}
+
+	// Second Refresh with unchanged DB reuses cached WindowCosts without rescanning.
+	if err := b.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if scans.Load() != 1 {
+		t.Fatalf("unchanged DB triggered rescan: scans = %d", scans.Load())
+	}
+
+	// Detail query works for Devin & Droid and no longer returns errDetailUnavailable.
+	rt := &liveApp{
+		devinB: b,
+		droidB: func() *quotaOnlyBridge {
+			db := newDroidBridge(t.TempDir(), quotaOnlyPrefs(), []string{"en"})
+			db.pricingSnapshot = func() pricing.Snapshot { return snap }
+			return db
+		}(),
+	}
+	for _, r := range store.CostRanges() {
+		sum, err := rt.queryDetailCost(context.Background(), store.ProviderDevin, CostQuery{Range: r})
+		if err != nil {
+			t.Fatalf("devin range %s: %v", r, err)
+		}
+		if r == store.CostRangeCurrent && (sum.EstimatedUSD == nil || sum.EstimatedUSD.String() != "1.5") {
+			t.Fatalf("devin detail current = %+v", sum)
+		}
+	}
+	custom, ok := usage.CustomRange(quotaOnlyNow.Add(-2*time.Hour), quotaOnlyNow, time.Local)
+	if !ok {
+		t.Fatal("invalid custom range")
+	}
+	if sum, err := rt.queryDetailCost(context.Background(), store.ProviderDevin, CostQuery{Custom: &custom}); err != nil || sum.Totals.Turns != 1 {
+		t.Fatalf("devin custom = %+v, %v", sum, err)
+	}
+	if _, err := rt.queryDetailCost(context.Background(), store.ProviderDroid, CostQuery{Range: store.CostRangeToday}); err != nil {
+		t.Fatalf("droid detail = %v", err)
+	}
+	if _, err := rt.queryDetailCost(context.Background(), store.ProviderCopilot, CostQuery{Range: store.CostRangeToday}); !errors.Is(err, errDetailUnavailable) {
+		t.Fatalf("copilot should stay unavailable, got %v", err)
+	}
+}
+
+func TestPanelQuotaOnlyRendersAPICostSection(t *testing.T) {
+	l := l10n.New(l10n.English)
+	snap := quotaOnlyFixture()
+	snap.Droid.Meters[0].ResetsAt = time.Now().Add(2 * time.Hour)
+	snap.Droid.Meters[0].UsedPercent = 25
+	snap.Droid.Meters[1].ResetsAt = time.Now().Add(24 * time.Hour)
+	snap.Droid.WindowCosts = []runway.QuotaOnlyWindowCost{
+		{Source: runway.SourceStandard, WindowMinutes: runway.FiveHourMinutes, USD: decimal.MustParse("12.50"), Priced: true},
+		{Source: runway.SourceModelSpecific, WindowMinutes: runway.WeeklyMinutes, USD: decimal.MustParse("99.00"), Priced: true},
+	}
+	a, tt := newPanel(t, func(p *store.Preferences) {
+		enableQuotaOnly(p)
+		p.SelectedProvider = store.ProviderDroid
+		p.ShowsCostSummary = true
+	}, snap, PanelActions{})
+	if tt.HasText(l.Text(l10n.KeyApiCost)) {
+		t.Fatalf("standalone API cost section should not be shown for Droid: %q", tt.Texts())
+	}
+	wantLine := "$12.50 / $50.00 · " + l.Text(l10n.KeyCursorEstimated)
+	if !tt.HasText(wantLine) || !tt.HasText(l.Text(l10n.KeyShowDetails)) {
+		t.Fatalf("window cost line or Show details missing for Droid: %q", tt.Texts())
+	}
+	if tt.HasText("$99.00") {
+		t.Fatalf("Core window cost should not be shown: %q", tt.Texts())
+	}
+	if err := tt.Click(l.Text(l10n.KeyShowDetails)); err != nil {
+		t.Fatal(err)
+	}
+	if a.panelState.detail != store.ModuleAPICost {
+		t.Fatalf("detail = %q, want %q", a.panelState.detail, store.ModuleAPICost)
+	}
+
+	// Hidden when ShowsCostSummary is false.
+	_, hidden := newPanel(t, func(p *store.Preferences) {
+		enableQuotaOnly(p)
+		p.SelectedProvider = store.ProviderDroid
+		p.ShowsCostSummary = false
+	}, snap, PanelActions{})
+	if hidden.HasText(wantLine) || hidden.HasText(l.Text(l10n.KeyShowDetails)) {
+		t.Fatalf("window cost shown while disabled: %q", hidden.Texts())
 	}
 }

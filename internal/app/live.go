@@ -309,7 +309,9 @@ func newRuntime(opts BackgroundOptions) *liveApp {
 	bridge.pricingSnapshot = prices.manager.Snapshot
 	cbridge.pricingSnapshot = prices.manager.Snapshot
 	gbridge.pricingSnapshot = prices.manager.Snapshot
+	fork.setPricingSnapshot(prices.manager.Snapshot)
 	prices.changed = rt.pricesChanged
+	prices.vendorChanged = rt.quotaOnlyPricesChanged
 	prices.invalidate = func() {
 		runOnMain(func() {
 			if opts.Host != nil {

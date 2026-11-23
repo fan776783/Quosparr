@@ -33,16 +33,20 @@ func (rt *liveApp) queryDetailCost(ctx context.Context, provider store.Provider,
 		}
 	}()
 	now := time.Now()
-	if provider.QuotaOnly() {
-		return usage.Summary{}, errDetailUnavailable
-	}
 	switch provider {
+	case store.ProviderDroid:
+		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDroid, rt.droidB, q, now)
+	case store.ProviderDevin:
+		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDevin, rt.devinB, q, now)
 	case store.ProviderGrok:
 		return rt.queryGrokDetailCost(ctx, q, now)
 	case store.ProviderClaude:
 		return rt.queryClaudeDetailCost(ctx, q, now)
 	case store.ProviderGemini:
 		return rt.queryGeminiDetailCost(ctx, q, now)
+	}
+	if provider.QuotaOnly() {
+		return usage.Summary{}, errDetailUnavailable
 	}
 	if rt.svc == nil {
 		return usage.Summary{}, errDetailUnavailable
@@ -147,6 +151,25 @@ func (rt *liveApp) queryGeminiDetailCost(ctx context.Context, q CostQuery, now t
 		return usage.Summary{}, errInvalidCostRange
 	}
 	return scanner.ScanCost(ctx, window, now)
+}
+
+func (rt *liveApp) queryQuotaOnlyDetailCost(ctx context.Context, provider store.Provider, b *quotaOnlyBridge, q CostQuery, now time.Time) (usage.Summary, error) {
+	if b == nil {
+		return usage.Summary{}, errDetailUnavailable
+	}
+	var window usage.Window
+	switch {
+	case q.Custom != nil:
+		window = q.Custom.Window
+	case q.Range.Valid():
+		window = quotaOnlyCostWindow(provider, q.Range, b.costDetail(), now)
+	default:
+		return usage.Summary{}, errInvalidCostRange
+	}
+	if !window.End.After(window.Start) {
+		return usage.Summary{}, errInvalidCostRange
+	}
+	return b.scanCostWindow(ctx, window, now, nil)
 }
 
 func installDetailActions(rt *liveApp, a *PanelActions) {
