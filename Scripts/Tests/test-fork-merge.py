@@ -25,7 +25,7 @@ class ForkMergeTests(unittest.TestCase):
         (self.repo / 'source.go').write_text('base\n')
         self.commit()
         self.git('branch', 'upstream')
-        self.config('1.8.2-cursor.2', 'fork')
+        self.config('1.8.2-fork.2', 'fork')
         self.commit()
         self.before = self.git('rev-parse', 'HEAD').strip()
 
@@ -54,7 +54,7 @@ class ForkMergeTests(unittest.TestCase):
         result = self.merge()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         data = json.loads((self.repo / 'mygo.json').read_text())
-        self.assertEqual(data['version'], '1.9.1-cursor.1')
+        self.assertEqual(data['version'], '1.9.1-fork.1')
         self.assertEqual(data['updates'], {'github': 'fork', 'publicKey': 'fork'})
         self.assertEqual(data['upstreamField'], '1.9.1')
         self.assertEqual(len(self.git('rev-list', '--parents', '-n', '1', 'HEAD').split()), 3)
@@ -84,7 +84,7 @@ class ForkMergeTests(unittest.TestCase):
         self.commit()
         self.git('checkout', 'main')
         self.assertEqual(self.merge().returncode, 0)
-        self.assertEqual(json.loads((self.repo / 'mygo.json').read_text())['version'], '1.8.2-cursor.2')
+        self.assertEqual(json.loads((self.repo / 'mygo.json').read_text())['version'], '1.8.2-fork.2')
 
     def test_prerelease_aborts_merge(self):
         self.git('checkout', 'upstream')

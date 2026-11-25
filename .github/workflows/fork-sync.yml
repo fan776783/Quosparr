@@ -125,7 +125,7 @@ jobs:
           python - <<'PY'
           import json, os, pathlib, re
           version = os.environ['FORK_VERSION']
-          if not re.fullmatch(r'\d+\.\d+\.\d+-cursor\.[1-9]\d*', version):
+          if not re.fullmatch(r'\d+\.\d+\.\d+-fork\.[1-9]\d*', version):
               raise SystemExit('Invalid fork version')
           release = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'fork-windows-release.json').read_text())
           if release['tagName'] != 'v' + version or release['isDraft'] or release['isPrerelease']:

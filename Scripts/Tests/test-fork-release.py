@@ -22,7 +22,7 @@ class ForkReleaseTests(unittest.TestCase):
         for name in ("package-v1-app.sh", "codesign-helpers.sh", "stage-v1-config.py", "fork_release_config.py"):
             shutil.copyfile(ROOT / "Scripts" / name, self.root / "Scripts" / name)
         self.config = json.loads((ROOT / "mygo.json").read_text())
-        self.config["version"] = "1.11.2-cursor.1"
+        self.config["version"] = "1.11.2-fork.1"
         self.env = dict(os.environ, V1_UPDATE_CHANNEL="stable", V1_DEVELOPMENT_PACKAGE="0",
                         V1_CONFIG_PATH=str(self.root / "mygo.json"), BASH_ENV="/dev/null",
                         V1_BUILD_DIR=str(self.root / "build"), GOCACHE=str(self.root / "cache"),
@@ -64,9 +64,9 @@ class ForkReleaseTests(unittest.TestCase):
     def test_stable_rejects_beta_invalid_fork_and_mismatched_repository(self):
         for version, repository, url in (
             ("1.12.0-beta.1", "Licoy/Quosparr", ""),
-            ("1.11.2-cursor.0", "fan776783/Quosparr", ""),
-            ("1.11.2-cursor.1", "Licoy/Quosparr", ""),
-            ("1.11.2-cursor.1", "fan776783/Quosparr", "https://updates.example.invalid"),
+            ("1.11.2-fork.0", "fan776783/Quosparr", ""),
+            ("1.11.2-fork.1", "Licoy/Quosparr", ""),
+            ("1.11.2-fork.1", "fan776783/Quosparr", "https://updates.example.invalid"),
         ):
             with self.subTest(version=version, repository=repository, url=url):
                 self.config["version"] = version

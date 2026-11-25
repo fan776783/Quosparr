@@ -7,7 +7,7 @@ import sys
 
 def is_fork_release(config):
     updates = config.get("updates", {})
-    return (re.fullmatch(r"\d+\.\d+\.\d+-cursor\.[1-9]\d*", config["version"]) is not None
+    return (re.fullmatch(r"\d+\.\d+\.\d+-fork\.[1-9]\d*", config["version"]) is not None
             and updates.get("github") == "fan776783/Quosparr"
             and not updates.get("url"))
 

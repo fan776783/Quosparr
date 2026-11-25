@@ -19,7 +19,7 @@ cd "$ROOT"
 [[ -z "$(git status --porcelain)" ]] || die "Working tree is not clean"
 [[ -r "$KEY" ]] || die "Missing update signing key: $KEY"
 VERSION="$(python3 -c 'import json; print(json.load(open("mygo.json"))["version"])')"
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-cursor\.[0-9]+$ ]] || die "Version must look like 1.7.3-cursor.1, got $VERSION"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-fork\.[0-9]+$ ]] || die "Version must look like 1.7.3-fork.1, got $VERSION"
 TAG="v$VERSION"
 HEAD="$(git rev-parse HEAD)"
 [[ "$(git ls-remote "$REMOTE" refs/heads/main | cut -f1)" == "$HEAD" ]] || die "Push HEAD to $REMOTE/main first"
@@ -32,7 +32,7 @@ MYGO_UPDATE_PRIVATE_KEY="$(cat "$KEY")" V1_DEVELOPMENT_PACKAGE=0 FORK_ADHOC_PACK
 go run ./Scripts/release-assets verify -config "$WORK/config/mygo.json" -dir "$WORK" -targets "darwin-$GOARCH"
 
 gh release create "$TAG" -R "$REPO" --target "$HEAD" --latest --title "Quosparr $VERSION" \
-  --notes "Fork build of upstream v${VERSION%%-cursor.*} with Cursor quota monitoring. macOS app uses ad-hoc signing and is not Apple-notarized; update archives are signed with the fork's update key." \
+  --notes "Fork build of upstream v${VERSION%%-fork.*} with multi-agent quota monitoring. macOS app uses ad-hoc signing and is not Apple-notarized; update archives are signed with the fork's update key." \
   "$WORK/Quosparr-macos-$ARCH.zip" "$WORK/Quosparr-macos-$ARCH.dmg" \
   "$WORK/quosparr-$VERSION-darwin-$GOARCH.tar.gz" "$WORK/update-darwin-$GOARCH.json"
 printf 'Published %s: https://github.com/%s/releases/tag/%s\n' "$TAG" "$REPO" "$TAG"

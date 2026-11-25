@@ -4,20 +4,20 @@
 
 ## 与上游的差异
 
-- Cursor 额度监控：`internal/cursor`、相关 UI / 偏好 / 文案与 `docs/cursor-monitoring.md`
+- 多 Agent 额度监控：Cursor、Copilot、Droid、Devin；Cursor 专有授权与隐私说明见 `docs/cursor-monitoring.md`
 - 更新源：`mygo.json` 的 `updates.github` 为 `fan776783/Quosparr`，`updates.publicKey` 为 fork 自有公钥；`internal/app/update.go` 的 Releases 链接同步指向 fork
-- 版本号：`<上游版本>-cursor.<序号>`，如上游 `1.7.3` 对应 `1.7.3-cursor.1`，同一上游版本上的后续发布递增序号
+- 版本号：`<上游版本>-fork.<序号>`，如上游 `1.7.3` 对应 `1.7.3-fork.1`，同一上游版本上的后续发布递增序号
 - 发布：Fork Sync 发布 macOS arm64 与 Windows x64 正式包到同一个 fork Release；`Scripts/fork-release.sh` 保留本机 macOS 发布入口（设为 latest）；fork 仓库停用了 `Release Draft` 与 `Website` workflow，CI 保留，另有 Fork Checks 执行 fork 专项检查
 
 ## 自动同步
 
 `.github/workflows/fork-sync.yml` 每天 UTC 00:17（北京时间 08:17，也可在 Actions 页手动运行）合并上游 `Licoy/Quosparr` 的 main：
 
-- `Scripts/fork-merge.sh` 先合并但不提交，叠加 fork 配置后再生成一个合并提交；只有 `mygo.json` 冲突时自动解决：保留上游其他字段，写回 fork 的公钥与仓库；上游升版时版本号改为 `<上游版本>-cursor.1`，上游预发布版本不自动同步
+- `Scripts/fork-merge.sh` 先合并但不提交，叠加 fork 配置后再生成一个合并提交；只有 `mygo.json` 冲突时自动解决：保留上游其他字段，写回 fork 的公钥与仓库；上游升版时版本号改为 `<上游版本>-fork.1`，上游预发布版本不自动同步
 - 其他冲突、测试失败，或上游改动了 `.github/workflows`（`GITHUB_TOKEN` 无权推送 workflow 文件，构建前检查）时不推送，运行失败并在摘要中列出原因，需按下方步骤手动同步
 - 有新合并或待发布版本时，必须运行完整发布前检查 `Scripts/check-go-release.sh`：`go vet`、race 测试、开发包测试、六平台交叉编译及全部发布辅助检查；检查通过后才推送和发布。没有新合并也不能跳过待发布版本的检查，检查失败不发布
 - `mygo.json` 的版本尚无对应 Release 时，在 macOS runner 上用 `FORK_UPDATE_PRIVATE_KEY` Secret 打包签名并发布 arm64 版本，已安装的 fork 版本随后经应用内更新升级；写权限仅授予限定本 fork 的同步 job，签名私钥临时文件在退出时清理
-- fork 的 `-cursor.N` 版本始终使用自己的 stable 更新源与公钥。macOS 发布通过 `FORK_ADHOC_PACKAGE=1` 保留现有 ad-hoc 应用签名，不做 Apple 公证；更新归档仍使用 fork 私钥签名。该模式只接受 fork 版本及更新仓库，上游正式发布继续要求 Developer ID 签名和公证，首次安装可能需要在系统设置中允许打开
+- fork 的 `-fork.N` 版本始终使用自己的 stable 更新源与公钥。macOS 发布通过 `FORK_ADHOC_PACKAGE=1` 保留现有 ad-hoc 应用签名，不做 Apple 公证；更新归档仍使用 fork 私钥签名。该模式只接受 fork 版本及更新仓库，上游正式发布继续要求 Developer ID 签名和公证，首次安装可能需要在系统设置中允许打开
 - 同步成功后，独立 Windows x64 job 检查同版本 Release：缺少全部 Windows 附件时，从该 Release 的标签检出源码，以同一 `FORK_UPDATE_PRIVATE_KEY` 构建正式包（更新器开启），通过归档验签及 Windows 原生安装、卸载、SQLite 检查后，追加 `Quosparr.Setup.<version>.amd64.exe`、`quosparr-<version>-windows-amd64.tar.gz` 和 `update-windows-amd64.json`；更新清单最后上传。macOS 发布后、Windows job 完成前，Release 暂时只有 macOS 包
 - Windows 三个附件已完整存在时跳过；因此重跑 Fork Sync 也能给已有版本补包。部分附件存在、附件为空或网络查询失败时停止，不覆盖已有文件、不移动标签；需核对上次上传后再处理。Windows 写权限同样只授予限定本 fork 的发布 job
 - Windows 安装验证脚本取触发本次 workflow 的提交，应用和打包源码仍取发布标签；这样可以修复旧标签的验收脚本并补包，同时保持已发布版本的源码一致。校验排除打包器额外生成的 `install.ps1` 下载辅助脚本，继续逐项检查实际安装文件
@@ -32,7 +32,7 @@ git fetch origin
 git switch main
 bash Scripts/fork-merge.sh origin/main
 # 若业务代码冲突，脚本会中止合并；手动 git merge --no-commit --no-ff origin/main 后逐项核对
-# mygo.json 的 version 取上游版本加 -cursor.1；publicKey / github 保留 fork 值
+# mygo.json 的 version 取上游版本加 -fork.1；publicKey / github 保留 fork 值
 bash Scripts/check-go-release.sh
 git push fork main
 ```
@@ -43,7 +43,7 @@ git push fork main
 bash Scripts/fork-release.sh
 ```
 
-脚本要求工作区干净、`HEAD` 已推送到 `fork/main`、版本号符合 `-cursor.N` 格式，签名私钥默认读取 `~/.config/quosparr-fork/mygo-update.key`（不进仓库，丢失后已安装的 fork 版本无法再收到更新）。已安装的 fork 版本通过应用内更新升级；从上游正式版切换到 fork 版需手动安装一次。
+脚本要求工作区干净、`HEAD` 已推送到 `fork/main`、版本号符合 `-fork.N` 格式，签名私钥默认读取 `~/.config/quosparr-fork/mygo-update.key`（不进仓库，丢失后已安装的 fork 版本无法再收到更新）。已安装的 fork 版本通过应用内更新升级；从上游正式版切换到 fork 版需手动安装一次。
 
 ## 减少重复冲突
 

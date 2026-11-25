@@ -58,7 +58,7 @@ class ForkWorkflowTests(unittest.TestCase):
         self.assertEqual(publish["if"], "steps.merge.outputs.release == 'true'")
 
     def invoke_windows_release(self, step_name, asset_names=(), *, gh_exit=0, go_exit=0, **release_fields):
-        version = "1.8.2-cursor.1"
+        version = "1.8.2-fork.1"
         release = dict(tagName="v" + version, isDraft=False, isPrerelease=False,
                        assets=[dict(name=name, size=100) for name in asset_names])
         release.update(release_fields)
@@ -96,8 +96,8 @@ class ForkWorkflowTests(unittest.TestCase):
             return result, calls, output.read_text() if output.exists() else ""
 
     def test_windows_release_backfills_existing_release_and_skips_complete_assets(self):
-        expected = ["Quosparr.Setup.1.8.2-cursor.1.amd64.exe",
-                    "quosparr-1.8.2-cursor.1-windows-amd64.tar.gz", "update-windows-amd64.json"]
+        expected = ["Quosparr.Setup.1.8.2-fork.1.amd64.exe",
+                    "quosparr-1.8.2-fork.1-windows-amd64.tar.gz", "update-windows-amd64.json"]
         for assets, output in ((["Quosparr-macos-arm64.dmg"], "needed=true\n"),
                                (expected, "needed=false\n")):
             with self.subTest(assets=assets):
@@ -107,7 +107,7 @@ class ForkWorkflowTests(unittest.TestCase):
                 self.assertEqual(len(calls), 1)
         for fields in (dict(assets=[dict(name=expected[0], size=100)]),
                        dict(assets=[dict(name=name, size=0) for name in expected]),
-                       dict(isDraft=True), dict(isPrerelease=True), dict(tagName="v1.8.0-cursor.1")):
+                       dict(isDraft=True), dict(isPrerelease=True), dict(tagName="v1.8.0-fork.1")):
             with self.subTest(fields=fields):
                 result, calls, output = self.invoke_windows_release("Check Windows release assets", **fields)
                 self.assertNotEqual(result.returncode, 0)
@@ -121,7 +121,7 @@ class ForkWorkflowTests(unittest.TestCase):
         script = next(s["run"] for s in steps if s.get("id") == "merge")
         with tempfile.TemporaryDirectory(prefix="quosparr-windows-only-") as temporary:
             root = pathlib.Path(temporary)
-            (root / "mygo.json").write_text(json.dumps(dict(version="1.8.2-cursor.1")))
+            (root / "mygo.json").write_text(json.dumps(dict(version="1.8.2-fork.1")))
             git = root / "git"
             git.write_text("#!/bin/sh\nexit 97\n")
             git.chmod(0o755)
@@ -131,7 +131,7 @@ class ForkWorkflowTests(unittest.TestCase):
             result = subprocess.run(["bash", "--noprofile", "--norc", "-euo", "pipefail", "-c", script],
                                     cwd=root, env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(output.read_text(), "version=1.8.2-cursor.1\nchanged=false\nrelease=false\n")
+            self.assertEqual(output.read_text(), "version=1.8.2-fork.1\nchanged=false\nrelease=false\n")
 
     def test_windows_upload_verifies_before_publishing_manifest_last(self):
         result, calls, _ = self.invoke_windows_release("Upload Windows release assets")
@@ -139,10 +139,10 @@ class ForkWorkflowTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertEqual(calls[0][:4], ["go", "run", "./Scripts/release-assets", "verify"])
         for call in calls[1:]:
-            self.assertEqual(call[:4], ["gh", "release", "upload", "v1.8.2-cursor.1"])
+            self.assertEqual(call[:4], ["gh", "release", "upload", "v1.8.2-fork.1"])
             self.assertNotIn("--clobber", call)
         self.assertEqual([pathlib.Path(p).name for p in calls[1][-2:]],
-                         ["Quosparr.Setup.1.8.2-cursor.1.amd64.exe", "quosparr-1.8.2-cursor.1-windows-amd64.tar.gz"])
+                         ["Quosparr.Setup.1.8.2-fork.1.amd64.exe", "quosparr-1.8.2-fork.1-windows-amd64.tar.gz"])
         self.assertEqual(pathlib.Path(calls[2][-1]).name, "update-windows-amd64.json")
         for gh_exit, go_exit, count in ((23, 0, 2), (0, 17, 1)):
             result, calls, _ = self.invoke_windows_release("Upload Windows release assets", gh_exit=gh_exit, go_exit=go_exit)

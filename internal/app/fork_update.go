@@ -2,7 +2,7 @@ package app
 
 import "regexp"
 
-var forkReleaseVersion = regexp.MustCompile(`^\d+\.\d+\.\d+-cursor\.[1-9]\d*$`)
+var forkReleaseVersion = regexp.MustCompile(`^\d+\.\d+\.\d+-fork\.[1-9]\d*$`)
 
 // Fork releases are published as stable releases despite their version suffix.
 // Keep their manifest on the fork repository, paired with its embedded update key.
