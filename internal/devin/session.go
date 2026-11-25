@@ -56,8 +56,11 @@ type SessionScanner struct {
 }
 
 type chatMessageDoc struct {
-	Role     string `json:"role"`
-	Metadata *struct {
+	MessageID string `json:"message_id"`
+	Role      string `json:"role"`
+	Metadata  *struct {
+		MessageID       string `json:"message_id"`
+		RequestID       string `json:"request_id"`
 		GenerationModel string `json:"generation_model"`
 		CreatedAt       string `json:"created_at"`
 		Metrics         *struct {
@@ -113,39 +116,19 @@ func (s SessionScanner) ScanEvents(ctx context.Context, w usage.Window, now time
 
 	var events []usage.PricedEvent
 	_, err := sqliteruntime.WithCopy(ctx, dbPath, sqliteruntime.DefaultMaxCopyBytes, func(db *sqlite.DB, _ string) error {
-		tables, err := sqliteTables(ctx, db)
-		if err != nil {
+		rows, ok, err := queryMessageNodes(ctx, db, w.Start, w.End)
+		if err != nil || !ok {
 			return err
 		}
-		if !tables["message_nodes"] {
-			return nil
-		}
-		hasWorkingDir := false
-		if tables["sessions"] {
-			cols, err := sqliteColumns(ctx, db, "sessions")
-			if err != nil {
-				return err
-			}
-			hasWorkingDir = cols["working_directory"]
-		}
-		query := "SELECT m.session_id, m.created_at, '', m.chat_message FROM message_nodes m WHERE m.created_at >= ? AND m.created_at <= ?"
-		if hasWorkingDir {
-			query = "SELECT m.session_id, m.created_at, COALESCE(s.working_directory, ''), m.chat_message FROM message_nodes m LEFT JOIN sessions s ON s.id = m.session_id WHERE m.created_at >= ? AND m.created_at <= ?"
-		}
-		startPad := w.Start.Add(-24 * time.Hour).Unix()
-		endPad := w.End.Add(24 * time.Hour).Unix()
-		rows, err := db.Query(ctx, query, startPad, endPad)
-		if err != nil {
-			return err
-		}
+		seen := map[string]bool{}
 		for _, row := range rows.Values {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if len(row) < 4 {
+			if len(row) < 7 {
 				continue
 			}
-			rawMsg := asString(row[3])
+			rawMsg := asString(row[6])
 			if !strings.Contains(rawMsg, `"metrics"`) || !strings.Contains(rawMsg, `"assistant"`) {
 				continue
 			}
@@ -156,7 +139,7 @@ func (s SessionScanner) ScanEvents(ctx context.Context, w usage.Window, now time
 			if doc.Role != "assistant" || doc.Metadata == nil || doc.Metadata.Metrics == nil {
 				continue
 			}
-			ts := parseMessageTime(doc.Metadata.CreatedAt, asInt64(row[1]))
+			ts := parseMessageTime(doc.Metadata.CreatedAt, asInt64(row[2]))
 			if ts.IsZero() || ts.Before(w.Start) || !ts.Before(w.End) {
 				continue
 			}
@@ -169,6 +152,14 @@ func (s SessionScanner) ScanEvents(ctx context.Context, w usage.Window, now time
 			total := uncached + cacheRead + output
 			if total == 0 {
 				continue
+			}
+			sessionID := asString(row[0])
+			dedupKey := messageDedupKey(sessionID, asString(row[1]), firstMessageID(doc.MessageID, doc.Metadata.MessageID), doc.Metadata.RequestID)
+			if dedupKey != "" {
+				if seen[dedupKey] {
+					continue
+				}
+				seen[dedupKey] = true
 			}
 			model := strings.TrimSpace(doc.Metadata.GenerationModel)
 			if model == "" {
@@ -187,8 +178,8 @@ func (s SessionScanner) ScanEvents(ctx context.Context, w usage.Window, now time
 			events = append(events, usage.PricedEvent{
 				Time:    ts,
 				Model:   model,
-				Project: usage.ProjectDisplayName(asString(row[2])),
-				Session: asString(row[0]),
+				Project: usage.ProjectDisplayName(asString(row[3])),
+				Session: sessionID,
 				Totals: usage.Totals{
 					TotalTokens:         total,
 					UncachedInputTokens: uncached,

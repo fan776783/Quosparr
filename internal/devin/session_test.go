@@ -102,12 +102,14 @@ func TestDevinSessionScannerCountsTiersFallbacksAndBoundaries(t *testing.T) {
 
 	// 1. Base-tier assistant call on day 1 (metadata.created_at takes precedence over column created_at).
 	//    Cost: 1000*5 + 2000*0.5 + 500*6.25 + 100*25 = (5000+1000+3125+2500)/1e6 = 0.011625
-	insertMsg("s1", `{"role":"assistant","metadata":{"generation_model":"claude-opus-5-5-medium","created_at":"`+start.Add(time.Hour).Format(time.RFC3339)+`","metrics":{"input_tokens":1000,"output_tokens":100,"cache_read_tokens":2000,"cache_creation_tokens":500}}}`, start.Add(-12*time.Hour).Unix())
+	insertMsg("s1", `{"message_id":"cost-1","role":"assistant","metadata":{"generation_model":"claude-opus-5-5-medium","created_at":"`+start.Add(time.Hour).Format(time.RFC3339)+`","metrics":{"input_tokens":1000,"output_tokens":100,"cache_read_tokens":2000,"cache_creation_tokens":500}}}`, start.Add(-12*time.Hour).Unix())
+	insertMsg("s1", `{"message_id":"cost-1","role":"assistant","metadata":{"generation_model":"claude-opus-5-5-medium","created_at":"`+start.Add(time.Hour).Format(time.RFC3339)+`","metrics":{"input_tokens":1000,"output_tokens":100,"cache_read_tokens":2000,"cache_creation_tokens":500}}}`, start.Add(-12*time.Hour).Unix())
 
 	// 2. Context-tier assistant call (> 200k prompt) on day 2 in same session.
 	//    prompt = 210_000 + 10_000 + 0 = 220_000 > 200_000
 	//    Cost: 210_000*10 + 10_000*1 + 1000*37.5 = (2_100_000+10_000+37_500)/1e6 = 2.1475
-	insertMsg("s1", `{"role":"assistant","metadata":{"generation_model":"claude-opus-5-5-medium","metrics":{"input_tokens":210000,"output_tokens":1000,"cache_read_tokens":10000,"cache_creation_tokens":0}}}`, start.Add(25*time.Hour).Unix())
+	insertMsg("s1", `{"role":"assistant","metadata":{"request_id":"req-2","generation_model":"claude-opus-5-5-medium","metrics":{"input_tokens":210000,"output_tokens":1000,"cache_read_tokens":10000,"cache_creation_tokens":0}}}`, start.Add(25*time.Hour).Unix())
+	insertMsg("s1", `{"role":"assistant","metadata":{"request_id":"req-2","generation_model":"claude-opus-5-5-medium","metrics":{"input_tokens":210000,"output_tokens":1000,"cache_read_tokens":10000,"cache_creation_tokens":0}}}`, start.Add(25*time.Hour).Unix())
 
 	// 3. Unknown model ("swe-2-medium") in session s2 -> unpriced.
 	insertMsg("s2", `{"role":"assistant","metadata":{"generation_model":"swe-2-medium","metrics":{"input_tokens":500,"output_tokens":50}}}`, start.Add(26*time.Hour).Unix())

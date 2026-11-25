@@ -68,7 +68,7 @@ func TestDevinScanSpeedDedupTTFTWindowsAndLimit(t *testing.T) {
 
 	// Message 1 (with ttft_ms=500, total_time_ms=2500 -> Decode=2000ms) duplicated twice by message_id.
 	msg1Time := now.Add(-2 * time.Hour)
-	msg1 := fmt.Sprintf(`{"role":"assistant","metadata":{"message_id":"m-1","generation_model":"claude-opus-5-5","started_generation_at":%q,"created_at":%q,"metrics":{"ttft_ms":500,"total_time_ms":2500,"output_tokens":200}}}`,
+	msg1 := fmt.Sprintf(`{"message_id":"m-1","role":"assistant","metadata":{"generation_model":"claude-opus-5-5","started_generation_at":%q,"created_at":%q,"metrics":{"ttft_ms":500,"total_time_ms":2500,"output_tokens":200}}}`,
 		msg1Time.Format(time.RFC3339Nano), msg1Time.Add(3*time.Second).Format(time.RFC3339Nano))
 	insertNode("s1", "n1", msg1, msg1Time.Unix())
 	insertNode("s1", "n2", msg1, msg1Time.Unix())

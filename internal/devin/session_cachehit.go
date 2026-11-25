@@ -19,9 +19,11 @@ import (
 var errSessionCacheWindow = errors.New("devin: invalid cache-hit window")
 
 type cacheChatMessageDoc struct {
-	Role     string `json:"role"`
-	Metadata *struct {
+	MessageID string `json:"message_id"`
+	Role      string `json:"role"`
+	Metadata  *struct {
 		MessageID           string `json:"message_id"`
+		RequestID           string `json:"request_id"`
 		GenerationModel     string `json:"generation_model"`
 		CreatedAt           string `json:"created_at"`
 		StartedGenerationAt string `json:"started_generation_at"`
@@ -61,7 +63,7 @@ func (s SessionScanner) ScanCache(ctx context.Context, window usage.Window, now 
 	sessions := map[string]cachehit.Totals{}
 	names := map[string]string{}
 	_, err := sqliteruntime.WithCopy(ctx, dbPath, sqliteruntime.DefaultMaxCopyBytes, func(db *sqlite.DB, _ string) error {
-		rows, ok, err := querySpeedMessageNodes(ctx, db, window.Start, window.End)
+		rows, ok, err := queryMessageNodes(ctx, db, window.Start, window.End)
 		if err != nil || !ok {
 			return err
 		}
@@ -105,7 +107,7 @@ func (s SessionScanner) ScanCache(ctx context.Context, window usage.Window, now 
 			}
 
 			sessionID := asString(row[0])
-			dedupKey := messageDedupKey(sessionID, asString(row[1]), doc.Metadata.MessageID)
+			dedupKey := messageDedupKey(sessionID, asString(row[1]), firstMessageID(doc.MessageID, doc.Metadata.MessageID), doc.Metadata.RequestID)
 			if dedupKey != "" {
 				if seen[dedupKey] {
 					continue

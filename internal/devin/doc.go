@@ -39,15 +39,18 @@
 // extracting metadata.generation_model, metadata.created_at (falling back to
 // message_nodes.created_at), and metadata.metrics.{input_tokens,output_tokens,
 // cache_read_tokens,cache_creation_tokens} where input_tokens is uncached input.
-// Messages without metrics or with zero total tokens are skipped. Each
-// counted assistant message increments Turns by 1 and selects any context tier
-// using prompt = input + cache_read + cache_creation.
+// Messages without metrics or with zero total tokens are skipped. Branch copies
+// of one generation are counted once by the top-level message_id, falling back
+// to metadata.message_id and metadata.request_id. Each counted assistant
+// message increments Turns by 1 and selects any context tier using prompt =
+// input + cache_read + cache_creation.
 //
 // # Speed
 //
 // ScanSpeed reads assistant messages within speed.Window before now from the
-// same temporary SQLite copy, deduplicated by metadata.message_id (falling
-// back to session_id and node_id when message_id is absent). Each message yields
+// same temporary SQLite copy, deduplicated by the top-level message_id (then
+// metadata.message_id and metadata.request_id, falling back to session_id and
+// node_id when all are absent). Each message yields
 // one speed.Sample using metadata.generation_model, timestamp
 // metadata.started_generation_at (falling back to metadata.created_at and then
 // message_nodes.created_at), and metadata.metrics.{ttft_ms,total_time_ms,

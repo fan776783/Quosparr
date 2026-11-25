@@ -19,9 +19,11 @@ import (
 )
 
 type speedChatMessageDoc struct {
-	Role     string `json:"role"`
-	Metadata *struct {
+	MessageID string `json:"message_id"`
+	Role      string `json:"role"`
+	Metadata  *struct {
 		MessageID           string `json:"message_id"`
+		RequestID           string `json:"request_id"`
 		GenerationModel     string `json:"generation_model"`
 		CreatedAt           string `json:"created_at"`
 		StartedGenerationAt string `json:"started_generation_at"`
@@ -56,7 +58,7 @@ func (s SessionScanner) ScanSpeed(ctx context.Context, now time.Time) ([]speed.S
 	cutoff := now.Add(-speed.Window)
 	var sessions []speed.Session
 	_, err := sqliteruntime.WithCopy(ctx, dbPath, sqliteruntime.DefaultMaxCopyBytes, func(db *sqlite.DB, _ string) error {
-		rows, ok, err := querySpeedMessageNodes(ctx, db, cutoff, now)
+		rows, ok, err := queryMessageNodes(ctx, db, cutoff, now)
 		if err != nil || !ok {
 			return err
 		}
@@ -98,7 +100,7 @@ func (s SessionScanner) ScanSpeed(ctx context.Context, now time.Time) ([]speed.S
 				continue
 			}
 			sessionID := asString(row[0])
-			dedupKey := messageDedupKey(sessionID, asString(row[1]), doc.Metadata.MessageID)
+			dedupKey := messageDedupKey(sessionID, asString(row[1]), firstMessageID(doc.MessageID, doc.Metadata.MessageID), doc.Metadata.RequestID)
 			if dedupKey != "" {
 				if seen[dedupKey] {
 					continue
@@ -213,7 +215,7 @@ func parseSessionActivityTime(v any) time.Time {
 	return time.Time{}
 }
 
-func querySpeedMessageNodes(ctx context.Context, db *sqlite.DB, start, end time.Time) (sqlite.Rows, bool, error) {
+func queryMessageNodes(ctx context.Context, db *sqlite.DB, start, end time.Time) (sqlite.Rows, bool, error) {
 	tables, err := sqliteTables(ctx, db)
 	if err != nil {
 		return sqlite.Rows{}, false, err
@@ -269,9 +271,21 @@ func querySpeedMessageNodes(ctx context.Context, db *sqlite.DB, start, end time.
 	return rows, true, nil
 }
 
-func messageDedupKey(sessionID, nodeID, messageID string) string {
+func firstMessageID(ids ...string) string {
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func messageDedupKey(sessionID, nodeID, messageID, requestID string) string {
 	if msgID := strings.TrimSpace(messageID); msgID != "" {
 		return "m:" + msgID
+	}
+	if reqID := strings.TrimSpace(requestID); reqID != "" {
+		return "r:" + reqID
 	}
 	if nodeID != "" {
 		return "n:" + sessionID + "\x00" + nodeID

@@ -75,7 +75,7 @@ func TestDevinScanCacheDedupNullsBoundariesAndSessionIDs(t *testing.T) {
 
 	// 1. At Start (inclusive), complete counters, duplicated twice by message_id.
 	//    input = 100 + 800 + 100 = 1000, cached = 800.
-	m1 := fmt.Sprintf(`{"role":"assistant","metadata":{"message_id":"msg-1","generation_model":"claude-opus-5-5","started_generation_at":%q,"metrics":{"input_tokens":100,"cache_read_tokens":800,"cache_creation_tokens":100,"total_time_ms":2000,"output_tokens":50}}}`,
+	m1 := fmt.Sprintf(`{"message_id":"msg-1","role":"assistant","metadata":{"generation_model":"claude-opus-5-5","started_generation_at":%q,"metrics":{"input_tokens":100,"cache_read_tokens":800,"cache_creation_tokens":100,"total_time_ms":2000,"output_tokens":50}}}`,
 		start.Format(time.RFC3339Nano))
 	insertNode("s1", "n1", m1, start.Unix())
 	insertNode("s1", "n2", m1, start.Unix())
