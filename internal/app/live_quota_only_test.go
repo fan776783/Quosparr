@@ -434,6 +434,7 @@ func TestDroidBridgeWindowCostsAndErrorPreservation(t *testing.T) {
 }
 
 func TestDevinBridgeCostCacheAndDetailQuery(t *testing.T) {
+	pinQuotaOnlyLocalUTC(t)
 	if err := sqliteruntime.Load(); err != nil {
 		t.Fatal(err)
 	}
