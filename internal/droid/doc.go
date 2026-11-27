@@ -15,9 +15,12 @@
 //     login keychain, which droid writes with /usr/bin/security and which is
 //     read the same way (the secret only travels on stdout);
 //   - auth.v2.keyring, keyed by service "Factory CLI", account
-//     "auth-encryption-key" of the system keyring, read through go-keyring on
-//     Windows and Linux only: on macOS that item belongs to droid's own
-//     process and reading it would prompt;
+//     "auth-encryption-key" of the system keyring: on Windows it reads the
+//     Credential Manager generic credential "Factory CLI/auth-encryption-key"
+//     (written by droid) first and falls back to
+//     "Factory CLI:auth-encryption-key"; on Linux it reads the Secret Service
+//     through go-keyring; on macOS it is skipped because that item belongs to
+//     droid's own process and reading it would prompt;
 //   - auth.v2.file, keyed by auth.v2.key in the same directory.
 //
 // Every readable file is opened and the login whose access token was issued

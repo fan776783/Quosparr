@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build !darwin && !windows
 
 package droid
 
@@ -8,8 +8,8 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// SystemKey reads the keyring item droid stores through the Windows
-// Credential Manager or the Linux Secret Service.
+// SystemKey reads the keyring item droid stores through the Linux Secret
+// Service.
 func SystemKey(ctx context.Context, account string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
