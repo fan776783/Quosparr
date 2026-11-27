@@ -139,7 +139,7 @@ func (rt *liveApp) queryForkCache(ctx context.Context, provider store.Provider, 
 	if b == nil {
 		return cachehit.Report{}, errDetailUnavailable
 	}
-	now := time.Now()
+	now := b.now()
 	var (
 		window usage.Window
 		err    error
@@ -166,21 +166,21 @@ func (rt *liveApp) queryForkDetailCost(ctx context.Context, provider store.Provi
 			err = context.Canceled
 		}
 	}()
-	now := time.Now()
 	switch provider {
 	case store.ProviderDroid:
-		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDroid, rt.droidB, q, now)
+		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDroid, rt.droidB, q)
 	case store.ProviderDevin:
-		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDevin, rt.devinB, q, now)
+		return rt.queryQuotaOnlyDetailCost(ctx, store.ProviderDevin, rt.devinB, q)
 	default:
 		return usage.Summary{}, errDetailUnavailable
 	}
 }
 
-func (rt *liveApp) queryQuotaOnlyDetailCost(ctx context.Context, provider store.Provider, b *quotaOnlyBridge, q CostQuery, now time.Time) (usage.Summary, error) {
+func (rt *liveApp) queryQuotaOnlyDetailCost(ctx context.Context, provider store.Provider, b *quotaOnlyBridge, q CostQuery) (usage.Summary, error) {
 	if b == nil {
 		return usage.Summary{}, errDetailUnavailable
 	}
+	now := b.now()
 	var window usage.Window
 	switch {
 	case q.Custom != nil:
