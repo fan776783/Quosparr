@@ -52,14 +52,27 @@ type geminiBridge struct {
 	generation        uint64
 	refreshMu         sync.Mutex
 	scanMu            sync.Mutex
-	sessions          gemini.SessionCache
+	// refusal is why the last manual quota read was refused, nil if none.
+	refusal  error
+	sessions gemini.SessionCache
 }
 
 func newGeminiBridge(mod *gemini.Module, home string, prefs store.Preferences, langs []string) *geminiBridge {
-	return &geminiBridge{
+	g := &geminiBridge{
 		mod: mod, prefs: prefs.Clone(), lc: l10n.ForPreference(string(prefs.Language), langs),
 		installed: func() bool { return gemini.ClientInstalled(home) },
 	}
+	if mod != nil {
+		mod.QuotaEnabled = g.quotaEnabled
+	}
+	return g
+}
+
+// quotaEnabled is the user's opt-in to the Gemini quota reads.
+func (g *geminiBridge) quotaEnabled() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.prefs.GeminiQuotaEnabled
 }
 
 func (g *geminiBridge) State(time.Time) runway.GeminiState {
@@ -70,9 +83,10 @@ func (g *geminiBridge) State(time.Time) runway.GeminiState {
 	return st
 }
 
-// Refresh follows the official login and reads the current account's quota.
-// The module spaces rate-limited reads itself, so force changes nothing.
-func (g *geminiBridge) Refresh(ctx context.Context, _ bool) error {
+// Refresh follows the official login. Only a manual refresh (force) asks
+// the module for the current account's quota, which its read policy may
+// refuse; an automatic one reads no quota and clears the last refusal.
+func (g *geminiBridge) Refresh(ctx context.Context, force bool) error {
 	g.changeRefreshing(1)
 	defer g.changeRefreshing(-1)
 	g.refreshMu.Lock()
@@ -81,10 +95,29 @@ func (g *geminiBridge) Refresh(ctx context.Context, _ bool) error {
 		return ctx.Err()
 	}
 	if g.mod != nil && g.mod.Store != nil {
-		g.mod.Refresh(ctx, gemini.RefreshTarget{Kind: gemini.RefreshCurrent})
+		var refusal error
+		if force {
+			refusal = geminiRefusal(g.mod.Refresh(ctx, gemini.RefreshTarget{Kind: gemini.RefreshCurrent}))
+		} else {
+			_ = g.mod.Sync(ctx)
+		}
+		g.mu.Lock()
+		g.refusal = refusal
+		g.mu.Unlock()
 	}
 	g.reload(true)
 	return ctx.Err()
+}
+
+// geminiRefusal is the read-policy refusal of a report, nil when the read
+// went out (its failures are stored on the account instead).
+func geminiRefusal(report gemini.RefreshReport) error {
+	for _, o := range report.Outcomes {
+		if isGeminiRefusal(o.Err) {
+			return o.Err
+		}
+	}
+	return nil
 }
 
 // RefreshLocal rescans the local Antigravity conversations without touching
@@ -137,19 +170,26 @@ func (g *geminiBridge) setPreferences(p store.Preferences, langs []string) {
 		g.state.Cost = nil
 	}
 	languageChanged := g.prefs.Language != p.Language
+	quotaChanged := g.prefs.GeminiQuotaEnabled != p.GeminiQuotaEnabled
+	if quotaChanged {
+		g.refusal = nil
+	}
 	g.prefs = p.Clone()
 	g.lc = l10n.ForPreference(string(p.Language), langs)
 	g.mu.Unlock()
-	if languageChanged {
+	if languageChanged || quotaChanged {
 		g.reload(true)
 	}
 }
 
 func (g *geminiBridge) reload(notify bool) {
 	g.mu.Lock()
-	lc, mod, installed := g.lc, g.mod, g.installed
+	lc, mod, installed, quotaOn, refusal := g.lc, g.mod, g.installed, g.prefs.GeminiQuotaEnabled, g.refusal
 	g.mu.Unlock()
-	next := buildGeminiState(mod, lc, installed)
+	next := buildGeminiState(mod, lc, installed, quotaOn)
+	if quotaOn && refusal != nil {
+		next.Notice = geminiRefusalText(lc, refusal)
+	}
 	g.mu.Lock()
 	next.Refreshing = g.refreshes > 0
 	g.applyLocalLocked(&next)
@@ -161,7 +201,9 @@ func (g *geminiBridge) reload(notify bool) {
 	}
 }
 
-func buildGeminiState(mod *gemini.Module, lc l10n.Localizer, installed func() bool) runway.GeminiState {
+// buildGeminiState reads the accounts and their cached quota. With reads
+// off the cached reading stays, with a notice naming its time.
+func buildGeminiState(mod *gemini.Module, lc l10n.Localizer, installed func() bool, quotaOn bool) runway.GeminiState {
 	st := runway.GeminiState{Availability: runway.GeminiNotLoggedIn}
 	if mod == nil || mod.Store == nil {
 		st.Availability = runway.GeminiNotInstalled
@@ -199,7 +241,13 @@ func buildGeminiState(mod *gemini.Module, lc l10n.Localizer, installed func() bo
 		}
 	}
 	st.Availability = geminiAvailability(acc, snap)
+	if !quotaOn && snap == nil && st.Availability != runway.GeminiReauthRequired {
+		st.Availability = runway.GeminiQuotaOff
+	}
 	st.LastError = geminiErrorText(lc, st.Availability)
+	if st.Availability == runway.GeminiQuotaOff {
+		return st
+	}
 	if acc.LastQuotaAt != nil {
 		st.UpdatedAt = *acc.LastQuotaAt
 	}
@@ -216,6 +264,9 @@ func buildGeminiState(mod *gemini.Module, lc l10n.Localizer, installed func() bo
 	st.Meters = geminiMeters(lc, *snap, st.UpdatedAt)
 	st.Details = geminiDetailLines(lc, *snap, st.UpdatedAt)
 	st.Detail = snap
+	if !quotaOn && !st.UpdatedAt.IsZero() {
+		st.Notice = lc.Textf(l10n.KeyGeminiQuotaOffStale, st.UpdatedAt.Local().Format("01-02 15:04"))
+	}
 	return st
 }
 
@@ -275,6 +326,8 @@ func geminiErrorText(lc l10n.Localizer, av runway.GeminiAvailability) string {
 		return lc.Text(l10n.KeyGeminiQuotaParseFailed)
 	case runway.GeminiFailed:
 		return lc.Text(l10n.KeyGeminiRefreshFailed)
+	case runway.GeminiQuotaOff:
+		return lc.Text(l10n.KeyGeminiQuotaOff)
 	}
 	return ""
 }

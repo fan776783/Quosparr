@@ -56,7 +56,17 @@ var (
 	ErrQuotaParse = errors.New("gemini: quota response could not be parsed")
 	// ErrQuotaSnapshotJSON: a cached snapshot is not valid snapshot JSON.
 	ErrQuotaSnapshotJSON = errors.New("gemini: quota snapshot is invalid")
+	// ErrQuotaDisabled: the user turned quota reads off.
+	ErrQuotaDisabled = errors.New("gemini: quota reads are disabled")
+	// ErrClientNotRunning: quota is read only while an Antigravity client runs.
+	ErrClientNotRunning = errors.New("gemini: Antigravity is not running")
 )
+
+// QuotaCooldownError: the previous quota read of the account is less than
+// QuotaMinInterval ago.
+type QuotaCooldownError struct{ RetryAfter time.Duration }
+
+func (e *QuotaCooldownError) Error() string { return "gemini: quota was read recently" }
 
 // Login errors.
 var (
