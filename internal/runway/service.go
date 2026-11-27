@@ -42,12 +42,15 @@ type Options struct {
 	CostCachePath       string // api-equivalent-cost.json
 	StatusPath          string // status.json (written when ExportsStatusJSON)
 
-	// Grok, Claude, Gemini and ResetToday are optional providers (see
-	// providers.go).
-	Grok       GrokProvider
-	Claude     ClaudeProvider
-	Gemini     GeminiProvider
-	ResetToday ResetTodayProvider
+	// Grok, Claude, Gemini, ResetToday and GeminiResetToday are optional
+	// providers (see providers.go). GeminiResetToday is the reset-status feed
+	// of the Gemini panel; it shares the reset alert switch and feeds no
+	// widget.
+	Grok             GrokProvider
+	Claude           ClaudeProvider
+	Gemini           GeminiProvider
+	ResetToday       ResetTodayProvider
+	GeminiResetToday ResetTodayProvider
 
 	// WidgetSink receives the widget snapshot when the widget schedule is
 	// due; nil disables widgets. WidgetRequirements is the data the active
@@ -253,6 +256,9 @@ func New(o Options) *Service {
 		o.ResetToday.SetOnChange(s.publish)
 	}
 	s.initForkProviders()
+	if o.GeminiResetToday != nil {
+		o.GeminiResetToday.SetOnChange(s.publish)
+	}
 	return s
 }
 
@@ -489,6 +495,8 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	wantEstimate := codexSelected && p.ShowsQuotaEstimateSummary && s.est == nil
 	wantResetToday := codexSelected && p.ShowsRateLimitResetToday && s.opts.ResetToday != nil &&
 		!s.opts.ResetToday.State(now).HasData
+	wantGeminiResetToday := p.SelectedProvider == store.ProviderGemini && p.ShowsRateLimitResetToday &&
+		s.opts.GeminiResetToday != nil && !s.opts.GeminiResetToday.State(now).HasData
 	rangeChanged := old.APICostSummaryRange != p.APICostSummaryRange
 	costOn := p.ShowsCostSummary && !old.ShowsCostSummary
 	heatOn := p.ShowsTokenUsageHeatmap && !old.ShowsTokenUsageHeatmap
@@ -544,6 +552,9 @@ func (s *Service) SetPreferences(p store.Preferences) {
 	}
 	if wantResetToday {
 		s.RefreshResetToday(true)
+	}
+	if wantGeminiResetToday {
+		s.RefreshGeminiResetToday(true)
 	}
 	if codexSelected && (rangeChanged && p.ShowsCostSummary || costOn) {
 		s.RefreshCost(usage.RefreshForce)
